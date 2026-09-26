@@ -9,19 +9,11 @@ from dataclasses import dataclass
 from sensors import (ELEC, FINAL_DRIVE, KMH_TO_WHEEL_RPM, MG2_REDUCTION, ONOFF, PRESS, RING_TEETH, ROT, SENSORS,
                      SOC, STEER, ELEC_EXTRA, SUN_TEETH, TEMPS, TIRE_CIRCUMFERENCE_M, TORQUE)
 
-BG = "#16181c"
-BODY = "#23262d"
-NO_DATA = "#33363d"
-TEXT = "#e8e8e8"
-DIM = "#8a8f99"
-IDEAL = "#3ddc68"
-WARN = "#ff3b3b"
-TIP_FG = "#1a1a1a"
-STALE_AFTER_S = 30  # other views refresh every ~8 s in the background, so allow a few misses before "(old)"
-WARN_AT = 0.85  # flashing red border from 85% of the way to danger (all views)
+import config as cfg
+from config import (AMP_LIMITS, AUX_HIGH, AUX_IDEAL, AUX_LOW, BG, BLK_IDEAL_DEV, BLK_WARN_DEV, BODY, CHARGE, DIM, HEAT,
+                    IDEAL, NO_DATA, PRESS_LIMITS, PRESS_RAMP, SLIP_IDEAL, SLIP_WARN, SPIN_FWD, SPIN_REV, SPIN_REV_TEXT,
+                    STALE_AFTER_S, TEXT, TIP_FG, WARN, WARN_AT)
 
-HEAT = [(0.0, (47, 79, 111)), (0.6, (217, 162, 27)), (1.0, (227, 23, 27))]
-CHARGE = [(0.0, (12, 12, 12)), (1.0, (255, 214, 0))]  # black = no current, yellow = too much
 
 
 def ramp(stops, fraction):
@@ -140,7 +132,7 @@ def unit_buttons(parent, view, app):
 
 def legend(parent, app, stops, left, right, title):
     panel_label(parent, title, pady=(16, 2))
-    lw, lh = int(300 * app.ui), int(16 * app.ui)
+    lw, lh = int(cfg.LEGEND_WIDTH * app.ui), int(16 * app.ui)
     c = tk.Canvas(parent, height=int(36 * app.ui), width=lw, bg=BG, highlightthickness=0)
     c.pack(anchor="w")
     for i in range(lw):
@@ -237,16 +229,16 @@ class TemperatureView:
             lines.append((f"Now: {self.fmt(v)}" + (f"  (last seen {age:.0f} s ago)" if age > STALE_AFTER_S else ""),
                           TIP_FG, 11, True))
             if v >= s.danger:
-                lines.append(("DANGER - hotter than it should ever get", "#d42020", 10, True))
+                lines.append(("DANGER - hotter than it should ever get", cfg.TIP_RED, 10, True))
             elif self.state(s, v) == "warn":
-                lines.append(("Getting close to danger", "#d42020", 10, True))
+                lines.append(("Getting close to danger", cfg.TIP_RED, 10, True))
             elif v > hi:
-                lines.append(("Warm - above ideal, still below danger", "#b86b00", 10, True))
+                lines.append(("Warm - above ideal, still below danger", cfg.TIP_AMBER, 10, True))
             elif v >= lo:
-                lines.append(("Ideal - right where it should be", "#1c8a3a", 10, True))
+                lines.append(("Ideal - right where it should be", cfg.TIP_GREEN, 10, True))
             else:
                 lines.append(("Cool - below its normal working range (normal soon after starting)",
-                              "#2f5f8f", 10, True))
+                              cfg.TIP_BLUE, 10, True))
         for label, _, _, _, *unit in s.extras:
             extra = values.get(f"{key}|{label}")
             shown = "--" if not extra else (f"{extra[0]:.0f}{unit[0]}" if unit else self.fmt(extra[0]))
@@ -283,10 +275,7 @@ class TemperatureView:
 # ======================================================================
 # Electrical view
 # ======================================================================
-# Current limits in amps: (ideal up to, too much at). Training-data estimates (unconfirmed).
-AMP_LIMITS = {"brake_act": (2, 6), "hvbatt": (40, 120), "boost": (40, 130), "inv1": (40, 100), "mg1": (40, 100),
-              "inv2": (50, 150), "mg2": (50, 150), "ac": (8, 20)}
-AUX_IDEAL, AUX_LOW, AUX_HIGH = (13.2, 14.8), 12.0, 15.0  # 12 V battery volts while READY (unconfirmed)
+# Current limits (AMP_LIMITS) and 12 V battery ranges (AUX_*) are in config.py.
 
 ELEC_INFO = {
     "brake_act": ("Brake actuator",
@@ -365,7 +354,6 @@ def elec_state(values, now):
 
 
 # Block voltage difference from the pack average: ideal within 0.15 V, flashing red from 0.3 V (unconfirmed)
-BLK_IDEAL_DEV, BLK_WARN_DEV = 0.15, 0.30
 
 
 def fmt_watts(w_):
@@ -407,10 +395,10 @@ class ElectricalView:
         ("lv_brake_act", [(93, 148.5), (93, 106), (90, 106)], "", "r"),
     ]
     LAMPS = {  # key: (box text, colour when on, is it a warning?)
-        "lamp_mil": ("ENG", "#ffb000", True), "lamp_abs": ("ABS", "#ffb000", True),
-        "lamp_brake": ("BRAKE", "#ff3030", True), "lamp_slip": ("SLIP", "#ffb000", True),
-        "lamp_ecb": ("ECB", "#ff3030", True), "buzzer": ("BUZZ", "#ffb000", True),
-        "brake_l": ("", "#ff2020", False), "brake_r": ("", "#ff2020", False),
+        "lamp_mil": ("ENG", cfg.LAMP_AMBER, True), "lamp_abs": ("ABS", cfg.LAMP_AMBER, True),
+        "lamp_brake": ("BRAKE", cfg.LAMP_RED, True), "lamp_slip": ("SLIP", cfg.LAMP_AMBER, True),
+        "lamp_ecb": ("ECB", cfg.LAMP_RED, True), "buzzer": ("BUZZ", cfg.LAMP_AMBER, True),
+        "brake_l": ("", cfg.BRAKE_LIGHT_ON, False), "brake_r": ("", cfg.BRAKE_LIGHT_ON, False),
     }
     FLAGS = {  # extra on/off signals that belong to a part: shown in its hover, bad ones make it flash red
         "boost": [("conv_gate", False), ("conv_shutdown", True), ("conv_fail", True), ("ov_conv", True)],
@@ -419,7 +407,7 @@ class ElectricalView:
         "ac": [("ac_gate", False)],
         "dcdc": [("dcdc_prohibit", False)],
     }
-    SOC_IDEAL = (40, 80)  # the Prius normally keeps the battery between these (training data, unconfirmed)
+    SOC_IDEAL = cfg.SOC_IDEAL
 
     def __init__(self):
         self.unit = "A"
@@ -455,7 +443,7 @@ class ElectricalView:
         """Battery charge bar under the hybrid battery."""
         soc = fresh(values, "soc", now)
         lo, hi = self.SOC_IDEAL
-        colour = "#3ddc68" if soc is not None and lo <= soc <= hi else "#ffb000"
+        colour = IDEAL if soc is not None and lo <= soc <= hi else cfg.LAMP_AMBER
         text = "Battery charge: --" if soc is None else f"Battery charge: {soc:.0f}%"
         cin, cout = fresh(values, "chg_lim", now), fresh(values, "dis_lim", now)
         if cin is not None and cout is not None:
@@ -497,7 +485,7 @@ class ElectricalView:
             rank = order.index(n - 1) + 1
             where = ("the LOWEST block" if rank == 1 else "the HIGHEST block" if rank == 14
                      else f"#{rank} of 14 (1 = lowest)")
-            colour = "#d42020" if abs(dev) >= BLK_WARN_DEV else "#1c8a3a" if abs(dev) <= BLK_IDEAL_DEV else "#b86b00"
+            colour = cfg.TIP_RED if abs(dev) >= BLK_WARN_DEV else cfg.TIP_GREEN if abs(dev) <= BLK_IDEAL_DEV else cfg.TIP_AMBER
             lines.append((f"{abs(dev):.3f} V {'above' if dev >= 0 else 'below'} the pack average - {where}",
                           colour, 10, True))
             lines.append((f"Pack: {sum(blocks):.1f} V total, spread {max(blocks) - min(blocks):.2f} V "
@@ -556,7 +544,7 @@ class ElectricalView:
             _, colour, warning = self.LAMPS[key]
             if on is None:
                 return Cell(NO_DATA, "", dashed=True)
-            dark = "#3a0d0d" if key in ("brake_l", "brake_r") else "#1b1c20"
+            dark = cfg.BRAKE_LIGHT_OFF if key in ("brake_l", "brake_r") else cfg.LAMP_OFF
             return Cell(colour if on else dark, "", "warn" if on and warning else None)
         if key == "pump":
             on = self.on(values, now, "pump_on")
@@ -564,7 +552,7 @@ class ElectricalView:
                 return Cell(NO_DATA, "--", dashed=True)
             duty = fresh(values, "pump_duty", now)
             text = ("ON" + (f" {duty:.0f}%" if duty is not None else "")) if on else "off"
-            return Cell(ramp(CHARGE, 0.45) if on else ramp(CHARGE, 0), text, dashed=True)
+            return Cell(ramp(CHARGE, cfg.ON_OFF_FILL) if on else ramp(CHARGE, 0), text, dashed=True)
         if key == "fan":
             pct = fresh(values, "fan_pct", now)
             if pct is None:
@@ -704,7 +692,7 @@ class ElectricalView:
                           f"Power: {'--' if w_ is None else fmt_watts(abs(w_))}", TIP_FG, 11, True))
             word = self.direction(key, d)
             if word:
-                lines.append((f"Right now it's {word}", "#1c8a3a" if word in ("charging", "generating") else "#b86b00",
+                lines.append((f"Right now it's {word}", cfg.TIP_GREEN if word in ("charging", "generating") else cfg.TIP_AMBER,
                               10, True))
             if key in AMP_LIMITS:
                 ideal, too_much = AMP_LIMITS[key]
@@ -735,7 +723,7 @@ class ElectricalView:
         for flag, bad in self.FLAGS.get(key, []):
             on = self.on(values, now, flag)
             lines.append((f"{SENSORS[flag].name}: {'--' if on is None else ('ON' if on else 'off')}",
-                          "#d42020" if bad and on else TIP_FG, 10, bool(bad and on)))
+                          cfg.TIP_RED if bad and on else TIP_FG, 10, bool(bad and on)))
         if key == "dcdc":
             duty = g("dcdc_duty")
             lines.append((f"Converter duty: {'--' if duty is None else f'{duty:.0f} %'} (how hard it's working)",
@@ -767,7 +755,7 @@ class ElectricalView:
         self.rows = reading_rows(parent, self.PANEL_ROWS, "Readings")
         panel_label(parent, "On right now", pady=(12, 0))
         self.on_now = panel_label(parent, "--", TEXT, 9)
-        self.on_now.config(wraplength=int(310 * app.ui))
+        self.on_now.config(wraplength=int(cfg.PANEL_TEXT_WIDTH * app.ui))
         panel_label(parent, "All readings answered in your car's full test (2026-09-26)\nMotor values estimated from torque × speed\n"
                             "Limits are estimates (unconfirmed)", DIM, 9, (10, 0))
 
@@ -805,23 +793,22 @@ class ElectricalView:
 # ======================================================================
 # Spinning view (everything in RPM; torque shown by rotor thickness + redness)
 # ======================================================================
-SPIN_FWD = [(0.0, (20, 24, 30)), (1.0, (41, 199, 255))]   # stopped -> max, turning forwards (cyan)
-SPIN_REV = [(0.0, (20, 24, 30)), (1.0, (208, 82, 255))]   # stopped -> max, turning backwards (magenta)
 PLANET = SUN_TEETH + RING_TEETH
 MG2_TO_WHEEL = MG2_REDUCTION * FINAL_DRIVE                # about 8.6 : 1
 
 # Max RPM (full colour) and ideal range per part. Training-data estimates (unconfirmed).
-SPIN_LIMITS = {
-    "engine": (5200, "0 (off) or 1,000-2,800"), "mg1": (10000, "up to 6,000 either way"),
-    "mg2": (13500, "up to 9,000"), "ring": (5000, None),
-    "fl": (1400, "within 3% of the other wheels"), "fr": (1400, "within 3% of the other wheels"),
-    "rl": (1400, "within 3% of the other wheels"), "rr": (1400, "within 3% of the other wheels"),
-    "ac": (9000, "up to 6,000"), "pump": (6000, "500-5,000"),
+SPIN_LIMITS = {   # (rpm at full colour, ideal range as text) - numbers from config.py
+    "engine": (cfg.SPIN_MAX_RPM["engine"], f"0 (off) or {cfg.ENGINE_IDEAL_RPM[0]:,}-{cfg.ENGINE_IDEAL_RPM[1]:,}"),
+    "mg1": (cfg.SPIN_MAX_RPM["mg1"], f"up to {cfg.MG1_IDEAL_MAX_RPM:,} either way"),
+    "mg2": (cfg.SPIN_MAX_RPM["mg2"], f"up to {cfg.MG2_IDEAL_MAX_RPM:,}"),
+    "ring": (cfg.SPIN_MAX_RPM["ring"], None),
+    **{w: (cfg.SPIN_MAX_RPM["wheel"], f"within {cfg.SLIP_IDEAL:.0%} of the other wheels") for w in ("fl", "fr", "rl", "rr")},
+    "ac": (cfg.SPIN_MAX_RPM["ac"], f"up to {cfg.AC_IDEAL_MAX_RPM:,}"),
+    "pump": (cfg.SPIN_MAX_RPM["pump"], f"{cfg.PUMP_IDEAL_RPM[0]:,}-{cfg.PUMP_IDEAL_RPM[1]:,}"),
 }
 # Max torque (Nm) = thickest, reddest rotor. Training-data estimates (unconfirmed).
-TORQUE_MAX = {"engine": 142, "mg1": 100, "mg2": 207, "ring": 650, "fl": 1050, "fr": 1050}
+TORQUE_MAX = cfg.TORQUE_MAX_NM
 WHEELS = ("fl", "fr", "rl", "rr")
-SLIP_IDEAL, SLIP_WARN = 0.03, 0.15   # a wheel this far from the average of the four = slipping/locking
 
 SPIN_INFO = {
     "engine": ("Engine", "Engine\n(crankshaft)",
@@ -876,7 +863,7 @@ class SpinView:
         ("fl", "wheel_fl"), ("fr", "wheel_fr"), ("rl", "wheel_rl"), ("rr", "wheel_rr"),
         ("steer", "steering_wheel"),
     ]]
-    STEER_MAX = 665   # full lock measured in your car (degrees)
+    STEER_MAX = cfg.STEER_MAX_DEG
 
     def __init__(self):
         self.unit = "rpm"
@@ -927,7 +914,7 @@ class SpinView:
         if rpm[key] is None or len(vals) < 2:
             return None, None
         avg = sum(vals) / len(vals)
-        if avg < 40:  # below ~5 km/h the 1.28 km/h sensor steps are too coarse to judge slip
+        if avg < cfg.SLIP_MIN_WHEEL_RPM:  # below ~5 km/h the 1.28 km/h sensor steps are too coarse to judge slip
             return None, None
         dev = (rpm[key] - avg) / avg
         return ("warn" if abs(dev) >= SLIP_WARN else "ideal" if abs(dev) <= SLIP_IDEAL else None), dev
@@ -938,10 +925,11 @@ class SpinView:
             return "warn"
         a = abs(r)
         if key == "engine":
-            return "ideal" if a < 1 or 1000 <= a <= 2800 else None
+            return "ideal" if a < 1 or cfg.ENGINE_IDEAL_RPM[0] <= a <= cfg.ENGINE_IDEAL_RPM[1] else None
         if key in WHEELS:
             return self.wheel_state(key, rpm)[0]
-        ok = {"mg1": a <= 6000, "mg2": a <= 9000, "ac": a <= 6000, "pump": 500 <= a <= 5000}.get(key)
+        ok = {"mg1": a <= cfg.MG1_IDEAL_MAX_RPM, "mg2": a <= cfg.MG2_IDEAL_MAX_RPM, "ac": a <= cfg.AC_IDEAL_MAX_RPM,
+              "pump": cfg.PUMP_IDEAL_RPM[0] <= a <= cfg.PUMP_IDEAL_RPM[1]}.get(key)
         return "ideal" if ok else None
 
     def cell(self, key, values, now):
@@ -949,7 +937,7 @@ class SpinView:
             a = self.steer_angle(values, now)
             if a is None:
                 return Cell(NO_DATA, "--")
-            side = "straight" if abs(a) < 5 else ("left" if a > 0 else "right")
+            side = "straight" if abs(a) < cfg.STEER_STRAIGHT_DEG else ("left" if a > 0 else "right")
             return Cell(ramp(SPIN_FWD, abs(a) / self.STEER_MAX), f"{abs(a):.0f}° {side}")
         if key == "fan":
             pct = fresh(values, "fan_pct", now)
@@ -973,7 +961,7 @@ class SpinView:
                for k, *_ in self.components if k in rpm and rpm[k] is not None]
         pct = fresh(values, "fan_pct", now)
         if pct is not None:  # not real RPM - the rotor just follows the fan's % power
-            out.append(("fan", pct * 50, None))
+            out.append(("fan", pct * cfg.FAN_RPM_PER_PCT, None))
         a = self.steer_angle(values, now)
         if a is not None:    # the steering wheel doesn't spin: its rotor is drawn at the real angle
             out.append(("steer", 0, None, a))
@@ -1022,7 +1010,7 @@ class SpinView:
             t = tq[key]
             lines.append((f"Twisting force (torque): {fmt_nm(t)}" + (f"  ({how[key]})" if t is not None else "")
                           + (f" - {abs(t) / TORQUE_MAX[key] * 100:.0f}% of max" if t is not None else ""),
-                          "#b83a1a", 10, True))
+                          cfg.TIP_TORQUE, 10, True))
             if key == "engine" and g("eng_nm") is not None and g("mg1_nm") is not None:
                 est = max(0.0, -g("mg1_nm") * PLANET / SUN_TEETH)
                 lines.append((f"Engine torque worked out from generator torque: {est:.0f} Nm", TIP_FG, 10, False))
@@ -1057,24 +1045,24 @@ class SpinView:
                 lines.append((f"{label}: {fmt_rpm(g(k))}", TIP_FG, 10, False))
             if len(got) >= 2:
                 spread = max(got) - min(got)
-                lines.append((f"Sources agree within {spread:.0f} rpm" if spread <= 50 else
+                lines.append((f"Sources agree within {spread:.0f} rpm" if spread <= cfg.RPM_SOURCES_AGREE else
                               f"Sources differ by {spread:.0f} rpm (normal while revving - they're read at different moments)",
-                              "#1c8a3a" if spread <= 50 else "#b86b00", 10, True))
+                              cfg.TIP_GREEN if spread <= cfg.RPM_SOURCES_AGREE else cfg.TIP_AMBER, 10, True))
             lines.append((f"Hybrid system's target engine speed: {fmt_rpm(g('eng_target'))} rpm", TIP_FG, 10, False))
         if key in ("mg1", "mg2", "ring") and None not in (ring_planet, ring_mg2):
             lines.append((f"Ring gear from engine + generator: {fmt_rpm(ring_planet)} rpm", TIP_FG, 10, False))
             lines.append((f"Ring gear from drive motor ÷ {MG2_REDUCTION}: {fmt_rpm(ring_mg2)} rpm", TIP_FG, 10, False))
             diff = abs(ring_planet - ring_mg2)
-            lines.append(("Gear numbers check out (within 30 rpm)" if diff <= 30 else
+            lines.append((f"Gear numbers check out (within {cfg.GEAR_CHECK_RPM} rpm)" if diff <= cfg.GEAR_CHECK_RPM else
                           f"Off by {diff:.0f} rpm - gear numbers may be wrong, or readings taken at different moments",
-                          "#1c8a3a" if diff <= 30 else "#b86b00", 10, True))
+                          cfg.TIP_GREEN if diff <= cfg.GEAR_CHECK_RPM else cfg.TIP_AMBER, 10, True))
         if key in WHEELS:
             kmh = g(f"whl_{key}")
             lines.append((f"Wheel speed sensor: {'--' if kmh is None else f'{kmh:.1f} km/h'}", TIP_FG, 10, False))
             state, dev = self.wheel_state(key, rpm)
             if dev is not None:
                 lines.append((f"{abs(dev) * 100:.1f}% {'faster' if dev > 0 else 'slower'} than the average wheel",
-                              "#d42020" if state == "warn" else "#1c8a3a" if state == "ideal" else "#b86b00", 10, True))
+                              cfg.TIP_RED if state == "warn" else cfg.TIP_GREEN if state == "ideal" else cfg.TIP_AMBER, 10, True))
             if key in ("fl", "fr"):
                 calc_mg2 = None if g("mg2_rpm") is None else g("mg2_rpm") / MG2_TO_WHEEL
                 calc_ring = None if ring_planet is None else ring_planet / FINAL_DRIVE
@@ -1082,9 +1070,10 @@ class SpinView:
                 lines.append((f"Calculated from engine + generator gearing: {fmt_rpm(calc_ring)} rpm", TIP_FG, 10, False))
                 if r is not None and calc_mg2 is not None and r > 40:
                     off = (calc_mg2 - r) / r * 100
-                    lines.append((f"Measured vs calculated: {off:+.1f}%" + (" - gear ratio + tire size confirmed" if abs(off) <= 3
+                    lines.append((f"Measured vs calculated: {off:+.1f}%" + (" - gear ratio + tire size confirmed"
+                                                                             if abs(off) <= cfg.WHEEL_CALC_MATCH_PCT
                                   else " - tire size or gear ratio may differ"),
-                                  "#1c8a3a" if abs(off) <= 3 else "#b86b00", 10, True))
+                                  cfg.TIP_GREEN if abs(off) <= cfg.WHEEL_CALC_MATCH_PCT else cfg.TIP_AMBER, 10, True))
             else:
                 for label, k in (("hybrid computer", "spd_hv"), ("engine computer", "spd_ecm"),
                                  ("brake computer", "spd_abs"), ("dashboard meter", "spd_meter")):
@@ -1110,10 +1099,10 @@ class SpinView:
     def build_panel(self, parent, app):
         panel_label(parent, "Unit: RPM (turns per minute)", TEXT, 10, (12, 0))
         legend(parent, app, SPIN_FWD, "stopped", "max", "Colour = how fast it's turning forwards")
-        c = tk.Canvas(parent, height=int(16 * app.ui), width=int(300 * app.ui), bg=BG, highlightthickness=0)
+        c = tk.Canvas(parent, height=int(16 * app.ui), width=int(cfg.LEGEND_WIDTH * app.ui), bg=BG, highlightthickness=0)
         c.pack(anchor="w", pady=(4, 0))
-        for i in range(int(300 * app.ui)):
-            c.create_line(i, 0, i, int(16 * app.ui), fill=ramp(SPIN_REV, i / (300 * app.ui)))
+        for i in range(int(cfg.LEGEND_WIDTH * app.ui)):
+            c.create_line(i, 0, i, int(16 * app.ui), fill=ramp(SPIN_REV, i / (cfg.LEGEND_WIDTH * app.ui)))
         panel_label(parent, "Purple = turning backwards", DIM, 9)
         panel_label(parent, "The rotor icons spin with the part (slowed down).\n"
                             "Thicker + redder rotor = more twisting force (torque).", TEXT, 9, (6, 0))
@@ -1133,20 +1122,13 @@ class SpinView:
             lbl.config(text=fmt_rpm(v), fg=DIM if v is None else (SPIN_REV_TEXT if v <= -1 else TEXT))
 
 
-SPIN_REV_TEXT = "#d88cff"
 
 
 # ======================================================================
 # Pressure view (kPa / psi / bar)
 # ======================================================================
-PRESS_RAMP = [(0.0, (20, 24, 30)), (1.0, (232, 236, 245))]   # none -> high (white)
 # key: (full colour at, ideal low, ideal high, warn below, warn above) in kPa. Training-data estimates (unconfirmed).
-PRESS_LIMITS = {
-    "map": (105, 20, 85, None, 110),
-    "baro": (105, 80, 105, 60, 110),
-    "ac": (3200, 600, 2200, None, 2700),
-    "evap": (5, -2.0, 1.5, -4.0, 4.0),
-}
+# PRESS_LIMITS (kPa: full colour, ideal low/high, warn below/above) are in config.py
 PRESS_INFO = {
     "baro": ("Outside air pressure", "Outside air\npressure",
              "The air pressure around the car (absolute). It drops as you go up in altitude and changes a little "

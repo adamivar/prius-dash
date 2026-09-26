@@ -48,7 +48,7 @@ straight away.
    ```
    python app.py --demo
    ```
-5. In the car, with the car in **READY** and the adapter plugged in:
+5. Set your COM port in `config.py` (`PORT = "COM6"`) or pass `--port`. In the car, with the car in **READY** and the adapter plugged in:
    ```
    python app.py
    python app.py --port COM5 --view battery
@@ -63,7 +63,8 @@ straight away.
 - `sensors.py` holds every reading: which computer, which request, and the formula. The current view is polled fast, the
   numbers the trip totals need every few loops, and every other view in the background (~every 8 s).
 - `views.py` / `closeups.py` draw the views; `app.py` is the window, hover cards and animation.
-- `calc.py` works out the calculated numbers and the trip totals; `specs.py` holds the car and fuel constants **with sources**.
+- `calc.py` works out the calculated numbers and the trip totals.
+- **`config.py` holds every setting, limit, colour and constant** (car and fuel numbers with their sources). Edit it to change the COM port, polling speed, normal/danger ranges, colours and more.
 
 Speed tricks (measured in the car): the app tells the adapter how many reply frames to expect (single-frame requests went
 from 64-174 ms to 36-44 ms), learns that count per request and falls back automatically if a reply comes back incomplete,
@@ -82,7 +83,7 @@ and switches between computers with a single command.
 | Capacity estimate | amp-hours counted / change in the car's charge % |
 | Ring gear / wheel RPM | planetary gear + 2.636 motor reduction + 3.267 final drive + stock 195/65R15 tire |
 
-Constants and where they come from are in [`specs.py`](specs.py). Estimates are labelled as estimates in the app.
+Constants and where they come from are in [`config.py`](config.py). Estimates are labelled as estimates in the app.
 
 ## Test tools
 
@@ -117,7 +118,7 @@ RPM instead), "actual engine torque" (always 0 - the app calculates it instead),
 - Car data: Toyota [3rd-generation Prius emergency response guide](https://techinfo.toyota.com/techInfoPortal/staticcontent/en/techinfo/html/prelogin/docs/3rdprius.pdf),
   Oak Ridge National Laboratory [evaluation of the 2010 Prius](https://info.ornl.gov/sites/publications/files/Pub26762.pdf),
   [Wikipedia: Toyota Prius (XW30)](https://en.wikipedia.org/wiki/Toyota_Prius_(XW30)); fuel data from the US DOE
-  [Alternative Fuels Data Center](https://afdc.energy.gov/fuels/properties). Full list in [`specs.py`](specs.py).
+  [Alternative Fuels Data Center](https://afdc.energy.gov/fuels/properties). Full list in [`config.py`](config.py).
 
 ## License
 

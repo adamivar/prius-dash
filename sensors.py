@@ -6,6 +6,9 @@ import time
 from dataclasses import dataclass
 from typing import Callable
 
+import config as cfg
+from config import FINAL_DRIVE, KMH_TO_WHEEL_RPM, MG2_REDUCTION, RING_TEETH, SUN_TEETH, TIRE_CIRCUMFERENCE_M
+
 
 def w(d, i):
     """Two bytes as one 16-bit number (Torque's A*256+B)."""
@@ -23,7 +26,7 @@ class Sensor:
     pid: str              # mode+PID sent to `header`
     decode: Callable      # data bytes -> value (always °C for temperatures)
     unit: str
-    cold: float = 0       # at/below this the box is the base colour
+    cold: float = 0       # at/below this the box is the base colour (temperatures: from config.TEMP_LIMITS)
     danger: float = 0     # at/above this the box is full red
     tested: bool = False  # True = this PID has answered in the test car (2010 Prius)
     ideal: tuple = (0, 0) # (low, high) healthy operating range -> green border
@@ -48,15 +51,15 @@ def start_and_peak(pid, i_start, i_peak):
 # Formulas: "ZVW30 Custom PIDs for Torque" spreadsheet, Metric tab.
 # cold/danger/ideal limits and the descriptions: training-data estimates, NOT from a Toyota source (unconfirmed).
 TEMPS = [
-    Sensor("ambient", "Outside air", "2101", lambda d: d[3] - 40, "°C", 0, 50, True, (10, 30),
+    Sensor("ambient", "Outside air", "2101", lambda d: d[3] - 40, "°C",
            label="Outside air", tech="Ambient temperature", extras=(("Climate system's outside sensor", "7C4", "2122", lambda d: d[0] * 89.25 / 255 - 23.3), ("Climate system's adjusted outside temp", "7C4", "213D", lambda d: d[0] * 81.6 / 255 - 30.8)),
            info="Air temperature outside the car, measured near the front bumper. "
                 "Can read high when parked in the sun or after slow driving (engine heat)."),
-    Sensor("intake_air", "Engine air intake", "2101", lambda d: d[2] - 40, "°C", 20, 70, True, (20, 45),
+    Sensor("intake_air", "Engine air intake", "2101", lambda d: d[2] - 40, "°C",
            label="Engine air intake", tech="Intake Air Temperature (IAT)", extras=(("At start of this drive", "7E0", "2137", lambda d: d[1] * 159.3 / 255 - 40),),
            info="Temperature of the air being sucked into the engine. Hotter air means slightly less power "
                 "and efficiency. It rises in traffic and when parked with the engine running."),
-    Sensor("engine", "Engine", "2101", lambda d: d[5] - 40, "°C", 40, 110, True, (80, 95),
+    Sensor("engine", "Engine", "2101", lambda d: d[5] - 40, "°C",
            label="Engine\n(coolant)", tech="Engine Coolant Temperature (ECT)", extras=(
                ("At start of this drive", "7E0", "2137", lambda d: d[0] * 159.3 / 255 - 40),
                ("Engine computer says", "7E0", "2101", lambda d: d[8] - 40),
@@ -66,66 +69,66 @@ TEMPS = [
            info="Temperature of the engine's coolant - the main 'is the engine warm' number. "
                 "Below about 80 °C the car runs the engine more to warm it up. "
                 "Sustained readings near the danger limit mean overheating: pull over."),
-    Sensor("mg1", "Generator motor", "2161", lambda d: d[0] - 40, "°C", 30, 150, True, (30, 90),
+    Sensor("mg1", "Generator motor", "2161", lambda d: d[0] - 40, "°C",
            label="Generator\n(MG1)", tech="MG1 temperature", extras=start_and_peak("2161", 1, 2),
            info="MG1 is the smaller motor-generator in the transmission. It starts the engine, "
                 "turns engine power into electricity, and sets engine speed through the planetary gear."),
-    Sensor("mg2", "Drive motor", "2162", lambda d: d[0] - 40, "°C", 30, 150, True, (30, 90),
+    Sensor("mg2", "Drive motor", "2162", lambda d: d[0] - 40, "°C",
            label="Drive motor\n(MG2)", tech="MG2 temperature", extras=start_and_peak("2162", 1, 2),
            info="MG2 is the main electric motor that turns the front wheels. It also acts as a "
                 "generator when you brake or coast (regenerative braking). Heats up on long climbs."),
-    Sensor("inv_mg1", "Generator inverter", "2170", lambda d: d[0] - 40, "°C", 30, 100, True, (30, 65),
+    Sensor("inv_mg1", "Generator inverter", "2170", lambda d: d[0] - 40, "°C",
            label="Generator\ninverter", tech="Inverter MG1 temperature", extras=start_and_peak("2170", 1, 2),
            info="Power electronics that convert between the battery's DC and the AC used by the "
                 "generator motor (MG1). Cooled by the separate inverter coolant loop."),
-    Sensor("inv_mg2", "Drive motor inverter", "2171", lambda d: d[0] - 40, "°C", 30, 100, True, (30, 65),
+    Sensor("inv_mg2", "Drive motor inverter", "2171", lambda d: d[0] - 40, "°C",
            label="Drive\ninverter", tech="Inverter MG2 temperature", extras=start_and_peak("2171", 1, 2),
            info="Power electronics that feed the drive motor (MG2). Works hardest during strong "
                 "acceleration and hard regenerative braking."),
-    Sensor("boost_upper", "Voltage booster (top)", "2174", lambda d: d[0] - 40, "°C", 30, 100, True, (30, 65),
+    Sensor("boost_upper", "Voltage booster (top)", "2174", lambda d: d[0] - 40, "°C",
            label="Booster\n(top)", tech="Boost converter temperature (upper)", extras=start_and_peak("2174", 2, 3),
            info="The boost converter raises the hybrid battery's ~200 V up to as much as ~650 V "
                 "for the motors. This is its upper temperature sensor."),
-    Sensor("boost_lower", "Voltage booster (bottom)", "2174", lambda d: d[1] - 40, "°C", 30, 100, True, (30, 65),
+    Sensor("boost_lower", "Voltage booster (bottom)", "2174", lambda d: d[1] - 40, "°C",
            label="Booster\n(bottom)", tech="Boost converter temperature (lower)", extras=start_and_peak("2174", 2, 3),
            info="Second temperature sensor on the boost converter (the part that raises battery "
                 "voltage for the motors)."),
-    Sensor("inv_coolant", "Inverter coolant", "2175", lambda d: d[3] - 40, "°C", 30, 80, False, (25, 55),
+    Sensor("inv_coolant", "Inverter coolant", "2175", lambda d: d[3] - 40, "°C",
            label="Inverter\ncoolant", tech="Inverter coolant temperature",
            info="The inverter and motors have their own coolant loop and electric pump, separate "
                 "from the engine's. A high reading here can mean a failing inverter coolant pump."),
-    Sensor("batt_intake", "Battery cooling air", "2187", lambda d: w(d, 0) * 255.9 / 65535 - 50, "°C", 15, 45, False, (15, 30),
+    Sensor("batt_intake", "Battery cooling air", "2187", lambda d: w(d, 0) * 255.9 / 65535 - 50, "°C",
            label="Battery cooling air", tech="HV battery intake air temperature",
            info="Air pulled from the cabin by a fan to cool the hybrid battery. The vent is by the "
                 "rear seat - keep it clear of bags and dust or the battery runs hotter."),
-    Sensor("batt_tb1", "Hybrid battery sensor 1", "2187", lambda d: w(d, 2) * 255.9 / 65535 - 50, "°C", 20, 55, False, (20, 35),
+    Sensor("batt_tb1", "Hybrid battery sensor 1", "2187", lambda d: w(d, 2) * 255.9 / 65535 - 50, "°C",
            label="Hybrid battery\ntemp 1", tech="Temp of Batt TB1", extras=(("Battery time spent too hot (counter)", "7E2", "2192", lambda d: w(d, 13), " (counter, 0 = never)"),),
            info="One of three temperature sensors inside the high-voltage hybrid battery (NiMH). "
                 "When it gets hot the car limits battery power to protect it."),
-    Sensor("batt_tb2", "Hybrid battery sensor 2", "2187", lambda d: w(d, 4) * 255.9 / 65535 - 50, "°C", 20, 55, False, (20, 35),
+    Sensor("batt_tb2", "Hybrid battery sensor 2", "2187", lambda d: w(d, 4) * 255.9 / 65535 - 50, "°C",
            label="Hybrid battery\ntemp 2", tech="Temp of Batt TB2", extras=(("Battery time spent too hot (counter)", "7E2", "2192", lambda d: w(d, 13), " (counter, 0 = never)"),),
            info="Middle temperature sensor in the hybrid battery. A sensor much hotter than the "
                 "others can point to a blocked cooling path or weak cells."),
-    Sensor("batt_tb3", "Hybrid battery sensor 3", "2187", lambda d: w(d, 6) * 255.9 / 65535 - 50, "°C", 20, 55, False, (20, 35),
+    Sensor("batt_tb3", "Hybrid battery sensor 3", "2187", lambda d: w(d, 6) * 255.9 / 65535 - 50, "°C",
            label="Hybrid battery\ntemp 3", tech="Temp of Batt TB3", extras=(("Battery time spent too hot (counter)", "7E2", "2192", lambda d: w(d, 13), " (counter, 0 = never)"),),
            info="Third temperature sensor in the hybrid battery. Compare it with the other two - "
                 "they should stay within a few degrees of each other."),
-    Sensor("aux_batt", "12V battery", "2141", lambda d: d[4] - 40, "°C", 15, 60, False, (10, 35),
+    Sensor("aux_batt", "12V battery", "2141", lambda d: d[4] - 40, "°C",
            label="12V battery", tech="Auxiliary battery temperature",
            info="The small 12 V battery in the cargo area. It powers the computers and 'boots' the "
                 "hybrid system when you press POWER. Heat shortens its life."),
-    Sensor("cabin", "Cabin air", "2121", lambda d: d[0] * 63.75 / 255 - 6.5, "°C", 10, 50, False, (18, 26),
+    Sensor("cabin", "Cabin air", "2121", lambda d: d[0] * 63.75 / 255 - 6.5, "°C",
            header="7C4", label="Cabin air", tech="Room temperature sensor (climate ECU)",
            extras=(("A/C set to", "7C4", "2129", lambda d: d[0] / 2 + 17.5),),
            info="Air temperature inside the car, from the climate control's sensor in the dashboard. "
                 "Parked in the sun it can get far hotter than outside."),
-    Sensor("evap", "A/C evaporator", "214B", lambda d: d[0] * 89.25 / 255 - 29.7, "°C", 0, 40, False, (1, 12),
+    Sensor("evap", "A/C evaporator", "214B", lambda d: d[0] * 89.25 / 255 - 29.7, "°C",
            header="7C4", label="A/C evaporator", tech="Evaporator fin thermistor (climate ECU)",
            extras=(("A/C is aiming for", "7C4", "214C", lambda d: w(d, 0) / 100 - 327.68),),
            info="The ice-cold radiator behind the dashboard that chills the cabin air. With A/C on it "
                 "should sit a few degrees above freezing; if it stays warm with A/C on, the A/C isn't "
                 "cooling. With A/C off it just follows the cabin temperature."),
-    Sensor("catalyst", "Catalytic converter", "013C", lambda d: w(d, 0) / 10 - 40, "°C", 100, 900, False, (400, 800),
+    Sensor("catalyst", "Catalytic converter", "013C", lambda d: w(d, 0) / 10 - 40, "°C",
            header="7E0", label="Catalytic converter", tech="Catalyst temp bank 1 sensor 1 (standard OBD PID 013C)",
            info="Cleans the exhaust. It has to be hot (roughly 400 °C or more) to work - one reason the "
                 "Prius runs the engine when cold. Usually an estimate calculated by the engine computer, "
@@ -368,12 +371,16 @@ BATTERY = [
 TRIP_KEYS = ("spd_hv", "eng_rpm_hv", "e_maf", "e_lambda", "batt_amps", "vl", "brake_lights", "regen_op",
              "ac_watts", "mg2_nm", "soc")
 
+def _apply_temp_limits():
+    for sensor in TEMPS:
+        sensor.cold, sensor.danger, lo, hi = cfg.TEMP_LIMITS[sensor.key]
+        sensor.ideal = (lo, hi)
+
+
+_apply_temp_limits()
+
 SENSORS = {s.key: s for s in TEMPS + ELEC + ROT + TORQUE + ONOFF + [SOC] + PRESS + STEER + ELEC_EXTRA
            + ENGINE + BATTERY}
-SLOW_EVERY = 4    # current view's slow readings: once every this many loops
-BG_PERIOD_S = 8   # other views' readings: refreshed about this often, in the background
-TRIP_EVERY = 3    # readings the trip totals need: read every this many loops, whatever the view
-BG_PER_LOOP = 3   # at most this many background requests per loop, so the current view stays fast
 
 
 def _jobs(sensors):
@@ -389,7 +396,7 @@ class Poller(threading.Thread):
     """Reads the current view's sensors over and over, and every other view's sensors in the
     background every few seconds. Latest values land in self.values."""
 
-    def __init__(self, sensors, port="COM6", demo=False):
+    def __init__(self, sensors, port=cfg.PORT, demo=False):
         super().__init__(daemon=True)
         self.port = port
         self.demo = demo
@@ -420,10 +427,10 @@ class Poller(threading.Thread):
 
     def _due(self, requests, loop, now):
         """Which requests to send this loop."""
-        due = [r for r, k in requests if k == "fast" or (k == "slow" and loop % SLOW_EVERY == 0)
-               or (k == "trip" and loop % TRIP_EVERY == 0)]
+        due = [r for r, k in requests if k == "fast" or (k == "slow" and loop % cfg.SLOW_EVERY == 0)
+               or (k == "trip" and loop % cfg.TRIP_EVERY == 0)]
         bg = sorted((self.last_bg.get(r, 0), r) for r, k in requests if k == "bg")
-        due += [r for last, r in bg if now - last >= BG_PERIOD_S][:BG_PER_LOOP]
+        due += [r for last, r in bg if now - last >= cfg.BG_PERIOD_S][:cfg.BG_PER_LOOP]
         return sorted(due)
 
     def snapshot(self):
@@ -478,7 +485,7 @@ class Poller(threading.Thread):
                     self.cycle_ms = int((time.monotonic() - t0) * 1000)
             except Exception as e:  # adapter unplugged, car off, port busy...
                 self._set_status(f"error: {e} - retrying in 3 s")
-                time.sleep(3)
+                time.sleep(cfg.RECONNECT_WAIT_S)
             finally:
                 elm.close()
 
@@ -507,15 +514,10 @@ class Poller(threading.Thread):
                     fake = peak[s.key] if label.startswith("Peak") else round(s.cold + 0.2 * span, 1)
                     self._store(f"{s.key}|{label}", fake)
             self.cycle_ms = 0
-            time.sleep(0.1)
+            time.sleep(cfg.DEMO_TICK_S)
 
 
-# Gen 3 Prius gearing and stock tire - training data, NOT from a Toyota source (unconfirmed).
-SUN_TEETH, RING_TEETH = 30, 78       # power-split planetary gear: MG1 = sun, engine = carrier, ring = output
-MG2_REDUCTION = 2.636                # MG2 -> ring gear
-FINAL_DRIVE = 3.267                  # ring gear -> front wheels
-TIRE_CIRCUMFERENCE_M = math.pi * (15 * 0.0254 + 2 * 0.195 * 0.65)   # stock 195/65R15, about 1.99 m
-KMH_TO_WHEEL_RPM = 1000 / 60 / TIRE_CIRCUMFERENCE_M                 # about 8.36
+# Gearing and tire constants live in config.py.
 
 
 def demo_electrical(t, smooth):

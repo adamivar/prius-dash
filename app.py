@@ -9,19 +9,14 @@ import math
 import time
 import tkinter as tk
 
+import config as cfg
 from calc import TRACKER
 from closeups import BatteryView, EngineView, TripView
 from sensors import SENSORS, TRIP_KEYS, Poller
 from views import BG, BODY, DIM, IDEAL, TEXT, TIP_FG, WARN, ElectricalView, PressureView, SpinView, TemperatureView
 
-BODY_EDGE = "#4a505c"
-TIP_BG = "#f4f4f0"
-FLOW = "#ffe14d"
 CAR_W, CAR_H = 100, 250   # car drawn in a 100 x 250 unit box, front at the top, driver on the left
-FRAME_MS = 40             # wire animation frame time
 L_EDGE = 16              # left edge of the parts column (x 4-16 is kept for wires)
-REFRESH_MS = 150          # how often the screen picks up new readings (was 500)
-ON_OFF_AMPS = 3.0        # arrow speed used for things that only report on/off (not a real current)
 
 
 def mix(hex_a, hex_b, t):
@@ -33,12 +28,13 @@ def mix(hex_a, hex_b, t):
 def rotor_speed(rpm):
     """On-screen turns per second for a part turning at `rpm`: slowed down a lot (a real engine at 1,500 rpm is
     25 turns a second), square-root scaled so slow and fast parts still look different, capped so it can't strobe."""
-    return math.copysign(min(2.5, 0.045 * math.sqrt(abs(rpm))), rpm) if abs(rpm) >= 1 else 0.0
+    return (math.copysign(min(cfg.ROTOR_MAX_TURNS_S, cfg.ROTOR_SQRT_GAIN * math.sqrt(abs(rpm))), rpm)
+            if abs(rpm) >= 1 else 0.0)
 
 
 def text_on(hex_colour):
     r, g, b = (int(hex_colour[i:i + 2], 16) for i in (1, 3, 5))
-    return "#111111" if (0.299 * r + 0.587 * g + 0.114 * b) > 150 else TEXT
+    return cfg.DARK_TEXT if (0.299 * r + 0.587 * g + 0.114 * b) > cfg.TEXT_LIGHTNESS_SWITCH else TEXT
 
 
 class App:
@@ -60,8 +56,9 @@ class App:
         root.title("Prius Live")
         root.configure(bg=BG)
         sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
-        root.geometry(f"{min(int(1150 * self.ui), sw - 60)}x{min(int(1000 * self.ui), sh - int(110 * self.ui))}+20+20")
-        root.minsize(760, 680)
+        (w, h), (mw, mh) = cfg.WINDOW_SIZE, cfg.WINDOW_MARGIN
+        root.geometry(f"{min(int(w * self.ui), sw - mw)}x{min(int(h * self.ui), sh - int(mh * self.ui))}+20+20")
+        root.minsize(*cfg.WINDOW_MIN_SIZE)
 
         side = tk.Frame(root, bg=BG)
         side.pack(side="right", fill="y", padx=(0, 12), pady=12)
@@ -78,7 +75,7 @@ class App:
                            bg=BG, fg=TEXT, selectcolor=BODY, activebackground=BG, activeforeground=TEXT,
                            font=("Segoe UI", 11), indicatoron=False, pady=4).pack(fill="x", pady=2)
         self.status = tk.Label(side, text="", bg=BG, fg=DIM, font=("Segoe UI", 9), justify="left",
-                               wraplength=int(310 * self.ui))
+                               wraplength=int(cfg.PANEL_TEXT_WIDTH * self.ui))
         self.status.pack(side="bottom", anchor="w")
         self.panel = tk.Frame(side, bg=BG)
         self.panel.pack(fill="both", expand=True)
@@ -126,7 +123,7 @@ class App:
         key, mx, my = self.hover
         title, lines = self.view.tooltip(key, values, now)
         c = self.canvas
-        width = int(380 * self.ui)
+        width = int(cfg.TOOLTIP_WIDTH * self.ui)
         items = [c.create_text(0, 0, text=title, anchor="nw", width=width, fill=TIP_FG,
                                font=("Segoe UI", 12, "bold"), tags="tip")]
         for text, colour, size, bold in lines:
@@ -141,7 +138,7 @@ class App:
         tx, ty = max(4, tx), min(max(4, my + gap), ch - th - 4)
         for it in items:
             c.move(it, tx + pad, ty + pad)
-        bg = c.create_rectangle(tx, ty, tx + tw, ty + th, fill=TIP_BG, outline="#9aa0aa", tags="tip")
+        bg = c.create_rectangle(tx, ty, tx + tw, ty + th, fill=cfg.TIP_BG, outline=cfg.TIP_BORDER, tags="tip")
         c.tag_lower(bg, items[0])
 
     # ---------- geometry ----------
@@ -170,23 +167,23 @@ class App:
         c = self.canvas
         c.delete("all")
         s, _, _ = self._geom()
-        fs = -max(10, int(s * 3.2))          # font size in pixels (negative = px), follows window size
-        fs_small = -max(9, int(s * 2.8))
-        fs_tiny = -max(8, int(s * 2.2))      # narrow boxes (battery blocks)
+        fs = -max(10, int(s * cfg.FONT_SCALE))          # font size in pixels (negative = px), follows window size
+        fs_small = -max(9, int(s * cfg.FONT_SCALE_SMALL))
+        fs_tiny = -max(8, int(s * cfg.FONT_SCALE_TINY))      # narrow boxes (battery blocks)
         now = time.time()
         values, _, _ = self.poller.snapshot()
 
         closeup = getattr(self.view, "scene", "car") == "closeup"
         if closeup:   # close-up views: a plain panel instead of the car
-            self._rounded(1, 1, 98, 247, 6, fill=BODY, outline=BODY_EDGE, width=2)
+            self._rounded(1, 1, 98, 247, 6, fill=BODY, outline=cfg.BODY_EDGE, width=2)
         else:
             for wx, wy in ((-1, 36), (94, 36), (-1, 196), (94, 196)):  # wheels
-                c.create_rectangle(*self._rect(wx, wy, 7, 24), fill="#0b0c0e", outline="#2c2f36")
-            self._rounded(4, 1, 92, 247, 18, fill=BODY, outline=BODY_EDGE, width=2)
-            self._rounded(12, 115, 76, 11, 5, fill="#1c2a36", outline="")   # windshield
-            self._rounded(20, 232, 60, 11, 5, fill="#1c2a36", outline="")   # rear window
+                c.create_rectangle(*self._rect(wx, wy, 7, 24), fill=cfg.TIRE, outline=cfg.TIRE_EDGE)
+            self._rounded(4, 1, 92, 247, 18, fill=BODY, outline=cfg.BODY_EDGE, width=2)
+            self._rounded(12, 115, 76, 11, 5, fill=cfg.GLASS, outline="")   # windshield
+            self._rounded(20, 232, 60, 11, 5, fill=cfg.GLASS, outline="")   # rear window
             for sx in (16, 54):                                              # front seats
-                self._rounded(sx, 146, 30, 12, 4, fill="", outline="#3a3f49", dash=(2, 3))
+                self._rounded(sx, 146, 30, 12, 4, fill="", outline=cfg.SEAT_OUTLINE, dash=(2, 3))
             c.create_text(*self._pt(L_EDGE, 129.5), text="Dashboard", anchor="sw", fill=DIM, font=("Segoe UI", fs_small))
             x0, y0 = self._pt(50, 0)
             c.create_text(x0, y0 - 2, text="▲ FRONT", fill=DIM, font=("Segoe UI", fs), anchor="s")
@@ -197,7 +194,7 @@ class App:
                                                                           if ny < 0 else "normal"))
 
         for label, gx, gy, gw, gh in self.view.groups:
-            c.create_rectangle(*self._rect(gx, gy, gw, gh), outline="#5b6270", dash=(4, 3))
+            c.create_rectangle(*self._rect(gx, gy, gw, gh), outline=cfg.GROUP_OUTLINE, dash=(4, 3))
             lx, ly = self._pt(gx, gy + gh)
             c.create_text(lx + 2, ly + 1, text=label, anchor="nw", fill=DIM, font=("Segoe UI", fs_small))
 
@@ -210,16 +207,18 @@ class App:
             px = [self._pt(x, y) for x, y in pts]
             flat = [v for p in px for v in p]
             if amps is None:
-                c.create_line(*flat, fill=style.get("line", "#a89a50") if active else "#6a6f78", width=max(2, int(2 * self.ui)),
+                c.create_line(*flat, fill=style.get("line", cfg.WIRE_ON) if active else cfg.WIRE_UNMEASURED,
+                              width=max(cfg.WIRE_MIN_WIDTH, int(cfg.WIRE_MIN_WIDTH * self.ui)),
                               dash=(6, 5))
                 width = 0
-                amps = ON_OFF_AMPS if active else None   # fixed slow arrows while it's on
+                amps = cfg.ON_OFF_AMPS if active else None   # fixed slow arrows while it's on
             else:
-                width = (2 + min(abs(amps), 150) / 150 * 8) * self.ui
-                c.create_line(*flat, fill=style.get("line", "#6b5a12") if abs(amps) >= 0.5 else "#4a4d55",
+                width = (cfg.WIRE_MIN_WIDTH + min(abs(amps), cfg.WIRE_FULL_AMPS) / cfg.WIRE_FULL_AMPS
+                         * cfg.WIRE_EXTRA_WIDTH) * self.ui
+                c.create_line(*flat, fill=style.get("line", cfg.WIRE_ACTIVE) if abs(amps) >= cfg.ARROW_MIN_AMPS else cfg.WIRE_IDLE,
                               width=width, capstyle="round", joinstyle="round")
             segs = [math.dist(a, b) for a, b in zip(px, px[1:])]
-            self.wire_px.append((px, segs, sum(segs), amps, width, style.get("arrow", FLOW)))
+            self.wire_px.append((px, segs, sum(segs), amps, width, style.get("arrow", cfg.FLOW)))
             i = max(range(len(segs)), key=segs.__getitem__)   # label the longest segment
             (ax, ay), (bx, by) = px[i], px[i + 1]
             labels.append(((ax + bx) / 2, (ay + by) / 2, abs(bx - ax) < abs(by - ay), label, width, side))
@@ -231,27 +230,27 @@ class App:
         for key, x, y, w_, h in self.view.components:
             cell = self.view.cell(key, values, now)
             if cell.state == "warn":
-                outline, width = (WARN if self.blink else "#0f1013"), 3
+                outline, width = (WARN if self.blink else cfg.OUTLINE), 3
             elif cell.state == "ideal":
                 outline, width = IDEAL, 3
             else:
-                outline, width = ("#c8ccd4", 2) if key == hovered else ("#0f1013", 1)
+                outline, width = (cfg.HOVER_OUTLINE, 2) if key == hovered else (cfg.OUTLINE, 1)
             x0, y0, x1, y1 = self._rect(x, y, w_, h)
             c.create_rectangle(x0, y0, x1, y1, fill=cell.fill, outline=outline, width=width,
                                dash=(5, 3) if cell.dashed and cell.state is None else None)
             name = self.view.label(key)
-            text = f"{name.replace(chr(10), ' ')}   {cell.text}" if h < 12 else f"{name}\n{cell.text}"
+            text = f"{name.replace(chr(10), ' ')}   {cell.text}" if h < cfg.ONE_LINE_BOX else f"{name}\n{cell.text}"
             c.create_text((x0 + x1) / 2, (y0 + y1) / 2, text=text, fill=text_on(cell.fill), justify="center",
-                          width=max(20, x1 - x0 - 6), font=("Segoe UI", fs if w_ >= 12 else fs_tiny, "bold"),
+                          width=max(20, x1 - x0 - 6), font=("Segoe UI", fs if w_ >= cfg.NARROW_BOX else fs_tiny, "bold"),
                           tags="label")
             if key in spinning:  # a rotor drawn behind the text, turning with the part
                 rpm, torque, angle = spinning[key]
                 r = 0.42 * min(x1 - x0, y1 - y0)
-                colour = mix(cell.fill, "#ffffff", 0.3)
+                colour = mix(cell.fill, cfg.ROTOR_TINT, cfg.ROTOR_TINT_AMOUNT)
                 width = max(2, int(2 * self.ui))
                 if torque is not None:  # more torque = thicker, redder rotor
-                    colour = mix(colour, "#ff2a1a", min(1.0, 0.25 + torque))
-                    width = max(2, int((2 + 8 * torque) * self.ui))
+                    colour = mix(colour, cfg.ROTOR_TORQUE, min(1.0, cfg.ROTOR_TORQUE_BASE + torque))
+                    width = max(2, int((2 + cfg.ROTOR_MAX_WIDTH * torque) * self.ui))
                 if angle is not None:   # e.g. the steering wheel: fixed at its real angle, left = anticlockwise
                     self.rotor_angle[key] = -angle
                     self.rotors.append((key, (x0 + x1) / 2, (y0 + y1) / 2, r, 0.0, colour, width + 1, "wheel"))
@@ -271,7 +270,7 @@ class App:
 
         for bar in (self.view.overlays(values, now) if hasattr(self.view, "overlays") else []):
             x0, y0, x1, y1 = self._rect(*bar["rect"])
-            c.create_rectangle(x0, y0, x1, y1, fill="#101114", outline="#5b6270")
+            c.create_rectangle(x0, y0, x1, y1, fill=cfg.BAR_BG, outline=cfg.GROUP_OUTLINE)
             if bar["fraction"] is not None:
                 c.create_rectangle(x0, y0, x0 + (x1 - x0) * max(0.0, min(1.0, bar["fraction"])), y1,
                                    fill=bar["colour"], outline="")
@@ -290,9 +289,9 @@ class App:
         """Moving chevrons along each wire: direction = power flow, speed and size = current."""
         c = self.canvas
         c.delete("anim")
-        spacing = 30 * self.ui
+        spacing = cfg.ARROW_SPACING * self.ui
         for idx, (px, segs, total, amps, width, arrow_colour) in enumerate(self.wire_px):
-            if amps is None or abs(amps) < 0.5 or total <= 0:
+            if amps is None or abs(amps) < cfg.ARROW_MIN_AMPS or total <= 0:
                 continue
             size = max(4 * self.ui, width * 0.75)
             sign = 1 if amps > 0 else -1
@@ -312,7 +311,7 @@ class App:
                 c.create_polygon(cx + tx * size, cy + ty * size,
                                  cx - tx * size * 0.6 + nx * size * 0.8, cy - ty * size * 0.6 + ny * size * 0.8,
                                  cx - tx * size * 0.6 - nx * size * 0.8, cy - ty * size * 0.6 - ny * size * 0.8,
-                                 fill=arrow_colour, outline="#1a1a1a", tags="anim")
+                                 fill=arrow_colour, outline=cfg.ARROW_OUTLINE, tags="anim")
                 d += spacing
         c.tag_raise("tip")
 
@@ -340,12 +339,12 @@ class App:
             self.draw_rotors()
         for idx, (_, _, _, amps, *_) in enumerate(self.wire_px):
             if amps is not None:
-                speed = min(400, 15 + 3 * abs(amps)) * self.ui          # px per second, faster with more amps
+                speed = min(cfg.ARROW_MAX_SPEED, cfg.ARROW_BASE_SPEED + cfg.ARROW_SPEED_PER_AMP * abs(amps)) * self.ui
                 # arrows are placed from the start of the wire, so reverse flow = decreasing phase
                 self.wire_phase[idx] = self.wire_phase.get(idx, 0.0) + speed * dt * (1 if amps > 0 else -1)
         if self.wire_px:
             self.draw_arrows()
-        self.root.after(FRAME_MS, self.animate)
+        self.root.after(cfg.FRAME_MS, self.animate)
 
     # ---------- refresh loop ----------
     def refresh(self):
@@ -359,14 +358,14 @@ class App:
     def tick(self):
         """Redraw often so new readings show up quickly; the warning border still blinks at ~1 Hz."""
         self.ticks = getattr(self, "ticks", 0) + 1
-        self.blink = (self.ticks * REFRESH_MS // 500) % 2 == 1
+        self.blink = (self.ticks * cfg.REFRESH_MS // cfg.BLINK_MS) % 2 == 1
         self.refresh()
-        self.root.after(REFRESH_MS, self.tick)
+        self.root.after(cfg.REFRESH_MS, self.tick)
 
 
 def main():
     ap = argparse.ArgumentParser(description="Prius Gen 3 live dashboard")
-    ap.add_argument("--port", default="COM6")
+    ap.add_argument("--port", default=cfg.PORT)
     ap.add_argument("--demo", action="store_true", help="fake data, no car needed")
     ap.add_argument("--view", default="Temperature", help="start in this view (Temperature, Electrical, Spinning, Pressure, Engine, Battery or Trip)")
     args = ap.parse_args()

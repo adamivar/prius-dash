@@ -12,13 +12,15 @@ import time
 
 import serial  # pip install pyserial
 
+import config as cfg
+
 
 class ElmError(Exception):
     pass
 
 
 class Elm327:
-    def __init__(self, port="COM6", baud=38400, header="7E2"):
+    def __init__(self, port=cfg.PORT, baud=cfg.BAUD, header="7E2"):
         self.port = port
         self.baud = baud
         self.header = header
@@ -34,9 +36,9 @@ class Elm327:
         return f"{int(header, 16) + 8:X}"   # Toyota replies come from request header + 8 (7E2 -> 7EA)
 
     def open(self):
-        self.ser = serial.Serial(self.port, self.baud, timeout=0.02)
-        self.send("ATZ", timeout=5)
-        time.sleep(0.5)
+        self.ser = serial.Serial(self.port, self.baud, timeout=cfg.SERIAL_READ_TIMEOUT_S)
+        self.send("ATZ", timeout=cfg.ELM_RESET_TIMEOUT_S)
+        time.sleep(cfg.ELM_RESET_WAIT_S)
         for cmd in ("ATE0", "ATL0", "ATS1", "ATH1", "ATSP6", "ATAR", f"ATSH{self.header}"):
             self.send(cmd)
 
@@ -57,7 +59,7 @@ class Elm327:
         if self.ser and self.ser.is_open:
             self.ser.close()
 
-    def send(self, cmd, timeout=3.0):
+    def send(self, cmd, timeout=cfg.ELM_TIMEOUT_S):
         """Send one command, return the reply text (without the '>' prompt) as soon as the prompt arrives."""
         self.ser.reset_input_buffer()
         self.ser.write((cmd + "\r").encode("ascii"))
@@ -77,7 +79,7 @@ class Elm327:
         """Send a mode/PID like '2161'. Return the data bytes (A, B, C...) or None."""
         key = (self.header, pid)
         count = self.frames.get(key, 0)
-        text = self.send(pid + (f"{count:X}" if 0 < count <= 15 else ""))
+        text = self.send(pid + (f"{count:X}" if 0 < count <= cfg.MAX_FRAMES_HINT else ""))
         msg, length, nframes = self._join_isotp(text)
         complete = length is not None and len(msg) >= length
         if count and not complete:            # the shortcut cut the reply short: stop using it for this question
