@@ -41,11 +41,16 @@ def poll_plan(view, views, poller):
 
 
 class Scene:
-    def __init__(self, canvas, ui=1.0, font="Segoe UI", margin=16, tooltip_width=cfg.TOOLTIP_WIDTH):
+    def __init__(self, canvas, ui=1.0, font="Segoe UI", margin=16, tooltip_width=cfg.TOOLTIP_WIDTH, max_stretch=1.0,
+                 margins=None):
         self.c = canvas
         self.ui = ui                 # line-width / spacing scale (1.0 = a 96 dpi Windows screen)
         self.font = font
-        self.margin = margin         # drawing units kept free around the car
+        # drawing units kept free around the car: (left/right each, top, bottom); default = margin / 2 all round
+        self.margins = margins or (margin / 2, margin / 2, margin / 2)
+        # how much wider (or taller) than true proportions the drawing may be stretched to fill the screen;
+        # 1.0 = never. Text follows the smaller scale, so anything that fits unstretched still fits.
+        self.max_stretch = max_stretch
         self.tooltip_width = tooltip_width
         self.view = None
         self.blink = False
@@ -61,15 +66,25 @@ class Scene:
         self.hover = None
 
     # ---------- geometry ----------
-    def geom(self):
+    def scales(self):
+        """(s, sx, sy, ox, oy): s = text / detail scale (pixels per drawing unit), sx / sy = horizontal / vertical
+        scale (differ when stretching to fill the screen), ox / oy = where drawing unit (0, 0) lands."""
         cw, ch = self.c.winfo_width(), self.c.winfo_height()
-        s = max(0.1, min(cw / (CAR_W + self.margin), ch / (CAR_H + self.margin)))
-        ox, oy = (cw - CAR_W * s) / 2, (ch - CAR_H * s) / 2
+        side, top, bottom = self.margins
+        sx, sy = max(0.1, cw / (CAR_W + 2 * side)), max(0.1, ch / (CAR_H + top + bottom))
+        s = min(sx, sy)
+        sx, sy = min(sx, s * self.max_stretch), min(sy, s * self.max_stretch)
+        ox = (cw - CAR_W * sx) / 2
+        oy = (ch - (CAR_H + top + bottom) * sy) / 2 + top * sy
+        return s, sx, sy, ox, oy
+
+    def geom(self):
+        s, _, _, ox, oy = self.scales()
         return s, ox, oy
 
     def pt(self, x, y):
-        s, ox, oy = self.geom()
-        return ox + x * s, oy + y * s
+        _, sx, sy, ox, oy = self.scales()
+        return ox + x * sx, oy + y * sy
 
     def rect(self, x, y, w, h):
         return (*self.pt(x, y), *self.pt(x + w, y + h))
@@ -81,8 +96,8 @@ class Scene:
 
     def hit(self, px, py):
         """Which part is under this pixel, or None."""
-        s, ox, oy = self.geom()
-        ux, uy = (px - ox) / s, (py - oy) / s
+        _, sx, sy, ox, oy = self.scales()
+        ux, uy = (px - ox) / sx, (py - oy) / sy
         return next((k for k, x, y, w_, h in self.view.components if x <= ux <= x + w_ and y <= uy <= y + h), None)
 
     # ---------- drawing ----------
@@ -227,18 +242,26 @@ class Scene:
         key, mx, my = self.hover
         title, lines = self.view.tooltip(key, values, now)
         c, f = self.c, self.font
-        width = int(self.tooltip_width * self.ui)
-        items = [c.create_text(0, 0, text=title, anchor="nw", width=width, fill=TIP_FG, font=(f, 12, "bold"), tags="tip")]
-        for text, colour, size, bold in lines:
-            y = c.bbox(items[-1])[3] + 4
-            items.append(c.create_text(0, y, text=text, anchor="nw", width=width, fill=colour, tags="tip",
-                                       font=(f, size, "bold") if bold else (f, size)))
-        x0, y0, x1, y1 = c.bbox(*items)
         pad, gap = int(10 * self.ui), int(18 * self.ui)
-        tw, th = x1 - x0 + 2 * pad, y1 - y0 + 2 * pad
+        width = int(min(self.tooltip_width * self.ui, c.winfo_width() - 2 * pad - 8))   # never wider than the screen
         cw, ch = c.winfo_width(), c.winfo_height()
+        shrink = 1.0
+        while True:   # a card taller than the screen gets smaller text until it fits
+            size = lambda pts: max(6, round(pts * shrink))
+            items = [c.create_text(0, 0, text=title, anchor="nw", width=width, fill=TIP_FG, font=(f, size(12), "bold"),
+                                   tags="tip")]
+            for text, colour, pts, bold in lines:
+                y = c.bbox(items[-1])[3] + 4
+                items.append(c.create_text(0, y, text=text, anchor="nw", width=width, fill=colour, tags="tip",
+                                           font=(f, size(pts), "bold") if bold else (f, size(pts))))
+            x0, y0, x1, y1 = c.bbox(*items)
+            tw, th = x1 - x0 + 2 * pad, y1 - y0 + 2 * pad
+            if th <= ch - 8 or shrink <= 0.55:
+                break
+            c.delete("tip")
+            shrink -= 0.1
         tx = mx + gap if mx + gap + tw < cw else mx - gap - tw  # flip to the left near the edge
-        tx, ty = max(4, tx), min(max(4, my + gap), ch - th - 4)
+        tx, ty = max(4, tx), max(4, min(my + gap, ch - th - 4))
         for it in items:
             c.move(it, tx + pad, ty + pad)
         bg = c.create_rectangle(tx, ty, tx + tw, ty + th, fill=cfg.TIP_BG, outline=cfg.TIP_BORDER, tags="tip")

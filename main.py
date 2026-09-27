@@ -84,7 +84,11 @@ class PriusApp(App):
         root.add_widget(body)
         self.body = body
 
-        self.scene = Scene(self.canvas_w, ui=self.ui, font=FONT, margin=10, tooltip_width=cfg.TOOLTIP_WIDTH)
+        # fill the whole screen: tight margins (wheels + the "FRONT" / close-up title above), stretched up to 60%
+        # wider or taller than true proportions to match the phone's shape (text still sized to fit)
+        self.scene = Scene(self.canvas_w, ui=self.ui, font=FONT, margins=(2, 7, 1.5), max_stretch=1.6,
+                           tooltip_width=10_000)   # info card: as wide as the screen allows
+        self.canvas_w.bind(size=lambda *_: self._resized())
         self.scene.set_view(self.view)
         self._build_panel()
         Window.bind(on_keyboard=self.on_key)
@@ -207,6 +211,12 @@ class PriusApp(App):
         hit = self.scene.hit(x, y)
         self.scene.hover = None if (not hit or (self.scene.hover and self.scene.hover[0] == hit)) else (hit, x, y)
         self.redraw()
+
+    def _resized(self):
+        """New screen size (rotation, split screen): redraw to fill it and re-wrap the side panel."""
+        if abs(tkshim.PANEL_WIDTH[0] - (Window.width - dp(28))) > 1:
+            self._build_panel()
+        Clock.schedule_once(lambda *_: self.redraw(), 0)
 
     # ---------- loops ----------
     def redraw(self):

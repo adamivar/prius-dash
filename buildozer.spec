@@ -7,7 +7,7 @@ source.include_exts = py
 source.exclude_dirs = tools, docs, .github, bin, .buildozer, __pycache__, venv, .venv
 # app.py is the Windows (tkinter) front end; the phone runs main.py
 source.exclude_patterns = app.py
-version = 0.1.0
+version = 0.2.0
 requirements = python3,kivy,pyjnius,android
 orientation = portrait
 fullscreen = 0
