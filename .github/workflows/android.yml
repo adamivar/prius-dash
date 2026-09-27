@@ -1,0 +1,67 @@
+# Builds the Android app (APK). Push a tag like v0.1.0 to publish it as a GitHub Release you can download on the
+# phone; "Run workflow" on the Actions tab builds one without releasing (download it from the run's artifacts).
+name: Android APK
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git zip unzip autoconf automake libtool pkg-config zlib1g-dev libncurses5-dev \
+            libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev
+          python -m pip install --upgrade pip
+          python -m pip install buildozer "cython==0.29.37"
+
+      - name: Check the code compiles on the phone's Python (3.11)
+        run: python -m compileall -q main.py scene.py shapes.py views.py closeups.py merged.py calc.py config.py sensors.py elm.py mobile
+
+      - name: Cache the Android SDK / NDK
+        uses: actions/cache@v4
+        with:
+          path: ~/.buildozer
+          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+
+      - name: Build APK
+        run: yes | buildozer -v android debug
+
+      - name: Name the APK
+        run: |
+          mkdir -p out
+          cp bin/*.apk "out/PriusLive-${GITHUB_REF_NAME//\//-}.apk"
+          ls -l out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PriusLive-apk
+          path: out/*.apk
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/*.apk
+          body: |
+            Android app for Prius Live. On the phone: download the .apk below, open it, and allow
+            "Install unknown apps" for your browser when Android asks. Pair the ELM327 adapter in
+            Android's Bluetooth settings first (PIN 1234 or 0000), then open the app and tap Adapter.

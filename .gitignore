@@ -6,3 +6,7 @@ venv/
 prius_*test_*.txt
 *_report.txt
 *.xlsx
+
+# Android build output
+.buildozer/
+bin/
