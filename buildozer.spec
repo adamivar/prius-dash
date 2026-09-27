@@ -19,6 +19,9 @@ android.minapi = 24
 android.archs = arm64-v8a, armeabi-v7a
 android.accept_sdk_license = True
 android.allow_backup = True
+# pinned: the stable python-for-android release (Python 3.11, Kivy 2.3) and the NDK it's tested with
+android.ndk = 25b
+p4a.branch = v2024.01.21
 
 [buildozer]
 log_level = 2
