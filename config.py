@@ -194,6 +194,10 @@ SLIP_WARN = 0.15                 # 15% or more = slipping/locking (flashing red)
 SLIP_MIN_WHEEL_RPM = 40          # below this (about 5 km/h) slip isn't judged
 STEER_MAX_DEG = 665              # full lock as read in the test car [MEASURED]
 FAN_RPM_PER_PCT = 50             # battery fan rotor: pretend rpm per % power (the car doesn't report fan rpm)
+# Front-wheel steering geometry (for drawing the front wheels turned):
+WHEELBASE_M = 2.70               # 106.3 in [Edmunds / The Car Connection 2010 Prius specs]
+FRONT_TRACK_M = 1.524            # 60.0 in with 15-inch wheels [same sources]
+TURN_RADIUS_M = 5.2              # 10.4 m turning circle [CarsGuide 2010 Prius dimensions]
 STEER_STRAIGHT_DEG = 5           # steering within this many degrees counts as "straight"
 RPM_SOURCES_AGREE = 50           # engine rpm from different computers "agree" within this
 GEAR_CHECK_RPM = 30              # ring gear from two calculations "checks out" within this

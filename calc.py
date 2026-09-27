@@ -323,3 +323,22 @@ class Tracker:
 
 
 TRACKER = Tracker()
+
+
+def front_wheel_angles_deg(steer_deg):
+    """How far each front wheel is turned (left wheel, right wheel) in degrees, + = towards the left, for a
+    steering-wheel angle (+ = left). Assumes the road wheels turn in proportion to the steering wheel, reaching
+    full lock at cfg.STEER_MAX_DEG, and Ackermann geometry: both wheels point at the same turning centre on the
+    rear-axle line, so the inside wheel turns more than the outside one. Full lock is set by the 5.2 m turning
+    radius of the outside front wheel (about 43 degrees inside, 31 outside)."""
+    if steer_deg is None:
+        return 0.0, 0.0
+    L, half = cfg.WHEELBASE_M, cfg.FRONT_TRACK_M / 2
+    centre_lock = math.sqrt(cfg.TURN_RADIUS_M ** 2 - L ** 2) - half      # turning centre -> middle of the rear axle
+    frac = max(-1.0, min(1.0, steer_deg / cfg.STEER_MAX_DEG))
+    mid = math.atan(L / centre_lock) * abs(frac)                           # angle of an imaginary middle wheel
+    if mid < 1e-6:
+        return 0.0, 0.0
+    centre = L / math.tan(mid)
+    inner, outer = math.degrees(math.atan(L / (centre - half))), math.degrees(math.atan(L / (centre + half)))
+    return (inner, outer) if frac > 0 else (-outer, -inner)                # turning left: left wheel is inside

@@ -17,9 +17,18 @@ hybrid battery. It also works out fuel economy, engine efficiency, battery healt
 | **Electrical** | Battery, booster, inverters, motors, A/C compressor, 12 V system and all 14 battery blocks with animated wires: arrow direction = current direction, speed and thickness = amps. Volts / Amps / Watts. Warning lights, brake lights, battery charge and power limits. |
 | **Spinning** | Everything that turns, in RPM: engine, both motor-generators, the planetary ring gear (calculated), all 4 wheels, A/C compressor, coolant pump, battery fan, plus the steering wheel at its real angle. Rotors spin with the part and get thicker/redder with torque. |
 | **Pressure** | Intake manifold (and engine vacuum), outside air pressure (and a rough altitude), A/C refrigerant pressure. kPa / psi / bar. |
-| **Engine** | Close-up of the engine bay laid out roughly like the real thing: air in -> throttle -> manifold -> cylinders -> exhaust, with animated air, exhaust, fuel and coolant flows. Misfires per cylinder, fuel trims, valve timing, and calculated fuel flow, economy, engine power and efficiency. |
+| **Everything** | The Temperature, Electrical, Spinning and Pressure views laid over one car. Each part merges every reading it has: fill colour = temperature (or current / speed), rotors + rolling tread = speed and torque, a thin top-edge bar = pressure, wire arrows = current, flashing red border if any reading is near danger. Hovering shows every reading from every view. A few parts move so nothing overlaps (outside air beside the air box, brake actuator at the cowl, battery temperatures as a strip along the pack). |
+| **Engine** | Close-up of the 2ZR-FXE seen from above, laid out like the real engine (intake at the front, exhaust and catalytic converter at the back, cylinder 4 by the transaxle): air in -> throttle -> manifold -> cylinders -> exhaust, with animated air, exhaust, fuel and coolant flows. Misfires per cylinder, fuel trims, valve timing, and calculated fuel flow, economy, engine power and efficiency. |
 | **Battery** | Close-up of the hybrid pack behind the rear seat: all 14 blocks (voltage, resistance, difference from average), temperatures, cooling air and fan, battery computer limits and stress counters, 12 V battery and DC-DC converter. Live per-block resistance and a capacity estimate. |
 | **Trip** | Running totals: distance, fuel used, average economy, share of distance driven on electricity, battery energy in/out, braking energy recovered, A/C energy, maximums. |
+
+The car views follow the real Gen 3 layout (sources are listed in `views.py`): engine on the passenger side with the
+transaxle and inverter on the driver side, catalytic converter against the firewall, warning lights in the centre meter,
+fuel tank under the rear seat, hybrid battery behind the rear seat with its air intake on the passenger side, 12 V
+battery on the passenger side of the cargo area. A few things are drawn slightly apart or stretched so every box stays
+readable. Each part is drawn with an outline like the real one seen from above (`shapes.py`): drum-shaped motors and
+A/C compressor, a canister catalytic converter, batteries with terminals, round cylinders, a toothed cam sprocket, finned
+radiator and inverter, tires with tread. `python tools/check_layout.py` checks that no boxes overlap and that all text fits.
 
 Everywhere: green border = normal range, flashing red border = close to danger, hover over any part for every reading,
 where it comes from and what it means. All views keep updating in the background, so switching views shows recent data
@@ -28,7 +37,7 @@ straight away.
 | | | |
 |---|---|---|
 | ![Temperature](docs/screenshots/temperature.png) | ![Spinning](docs/screenshots/spinning.png) | ![Engine](docs/screenshots/engine.png) |
-| ![Battery](docs/screenshots/battery.png) | ![Trip](docs/screenshots/trip.png) | |
+| ![Battery](docs/screenshots/battery.png) | ![Trip](docs/screenshots/trip.png) | ![Everything](docs/screenshots/everything.png) |
 
 ## What you need
 
@@ -53,8 +62,25 @@ straight away.
    python app.py
    python app.py --port COM5 --view battery
    ```
-   Views: `temperature`, `electrical`, `spinning`, `pressure`, `engine`, `battery`, `trip`. Only one program can use the
+   Views: `temperature`, `electrical`, `spinning`, `pressure`, `everything`, `engine`, `battery`, `trip`. Only one program can use the
    adapter at a time.
+
+## Android app
+
+The same views run on an Android phone (Android 7 or newer).
+
+1. On the phone, open this repo's [Releases page](https://github.com/adamivar/prius-dash/releases), download the
+   latest `PriusLive-….apk` and open it. Android will ask you to allow "Install unknown apps" for your browser the
+   first time (the app isn't from the Play Store).
+2. Pair the ELM327 adapter in Android's Bluetooth settings (PIN usually `1234` or `0000`).
+3. Open **Prius Live**, allow "Nearby devices" when asked, and pick the adapter (or **Demo mode**). The app remembers
+   it; tap **Adapter** to change it.
+4. Pick a view at the top. **Info** shows that view's side panel (units, legend, readings); tap a part for all its
+   readings, tap it again or press Back to close. The screen stays on while the app is open.
+
+Only one app can use the adapter at a time. The phone app is `main.py` (Kivy); it shares everything else with the
+Windows app. `python main.py` runs it on a PC in demo mode (`pip install kivy`). GitHub Actions builds the APK
+(`.github/workflows/android.yml`): pushing a tag like `v0.2.0` publishes a new release.
 
 ## How it works
 
@@ -62,7 +88,8 @@ straight away.
   `7C0` dashboard meter, `7C4` climate), sends a request, and rebuilds multi-frame replies.
 - `sensors.py` holds every reading: which computer, which request, and the formula. The current view is polled fast, the
   numbers the trip totals need every few loops, and every other view in the background (~every 8 s).
-- `views.py` / `closeups.py` draw the views; `app.py` is the window, hover cards and animation.
+- `views.py` / `closeups.py` / `merged.py` describe the views, `shapes.py` the part outlines, `scene.py` draws them
+  (wires, arrows, rotors, info cards); `app.py` is the Windows window, `main.py` + `mobile/` the Android app.
 - `calc.py` works out the calculated numbers and the trip totals.
 - **`config.py` holds every setting, limit, colour and constant** (car and fuel numbers with their sources). Edit it to change the COM port, polling speed, normal/danger ranges, colours and more.
 

@@ -10,8 +10,6 @@ Speed tricks, all measured in the car:
 """
 import time
 
-import serial  # pip install pyserial
-
 import config as cfg
 
 
@@ -20,8 +18,11 @@ class ElmError(Exception):
 
 
 class Elm327:
-    def __init__(self, port=cfg.PORT, baud=cfg.BAUD, header="7E2"):
+    def __init__(self, port=cfg.PORT, baud=cfg.BAUD, header="7E2", link=None):
+        """port = COM port; or pass link = a function that opens and returns a serial-like connection
+        (read / write / in_waiting / reset_input_buffer / close / is_open), e.g. Android Bluetooth."""
         self.port = port
+        self.link = link
         self.baud = baud
         self.header = header
         self.reply_header = self._reply(header)
@@ -36,7 +37,11 @@ class Elm327:
         return f"{int(header, 16) + 8:X}"   # Toyota replies come from request header + 8 (7E2 -> 7EA)
 
     def open(self):
-        self.ser = serial.Serial(self.port, self.baud, timeout=cfg.SERIAL_READ_TIMEOUT_S)
+        if self.link:
+            self.ser = self.link()
+        else:
+            import serial  # pip install pyserial
+            self.ser = serial.Serial(self.port, self.baud, timeout=cfg.SERIAL_READ_TIMEOUT_S)
         self.send("ATZ", timeout=cfg.ELM_RESET_TIMEOUT_S)
         time.sleep(cfg.ELM_RESET_WAIT_S)
         for cmd in ("ATE0", "ATL0", "ATS1", "ATH1", "ATSP6", "ATAR", f"ATSH{self.header}"):

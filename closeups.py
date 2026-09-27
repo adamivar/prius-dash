@@ -92,11 +92,14 @@ class CloseupView:
     about = ""
     poll_extra = ()                   # sensors used inside calculated readings (so they get polled too)
     flows = []
+    part_shapes = {}                  # part key -> outline shape (see shapes.py)
+    default_shape = "box"
 
     def __init__(self):
         self.unit = "C"
         self.by_key = {p.key: p for p in self.parts}
         self.components = [(p.key, *p.rect) for p in self.parts]
+        self.shapes = {p.key: self.part_shapes.get(p.key, self.default_shape) for p in self.parts}
         self.notes = [(self.title, 50, -3)]
 
     # ---------- values ----------
@@ -257,31 +260,39 @@ def _oil_state(values, now):
 class EngineView(CloseupView):
     name = "Engine"
     title = "ENGINE close-up  ·  2ZR-FXE 1.8 L"
-    about = ("Laid out roughly like the engine bay seen from above, front of the car at the top: radiator at the "
-             "front, cylinder 4 next to the transmission, air filter -> throttle -> intake manifold + injectors -> cylinders -> exhaust with the air-fuel "
-             "sensor and catalytic converter at the back, exhaust pipe running to the rear. Blue arrows = air, "
-             "brown = exhaust (both speed up with the real air-flow reading), orange = fuel, red/blue = coolant. "
-             "Positions are approximate (training data, unconfirmed). The engine is often OFF in a Prius - "
-             "then the flows stop.")
+    about = ("Laid out like the engine seen from above, front of the car at the top, driver's side on the left. "
+             "The 2ZR-FXE sits across the car with its intake at the front and its exhaust at the back against "
+             "the firewall: radiator -> air filter (in the middle of the engine bay, so over the transaxle end of "
+             "the engine) -> throttle -> intake manifold + injectors -> cylinders (4 next to the transaxle, 1 at "
+             "the timing-chain end, where the valve timing and crank pulley are) -> exhaust manifold with the "
+             "air-fuel sensor, catalytic converter and EGR cooler -> exhaust pipe under the middle of the car. "
+             "The fuel tank is under the rear seat. Blue arrows = air, brown = exhaust (both speed up with the "
+             "real air-flow reading), orange = fuel, red/blue = coolant. Exact spots are approximate. The engine "
+             "is often OFF in a Prius - then the flows stop.")
     flows = [
-        Flow([(3.2, -1), (3.2, 23), (4, 23)], AIR, _maf(), "air in", (4.5, 13)),
+        Flow([(2, -1), (2, 23), (4, 23)], AIR, _maf(), "air in", (3, 5)),
         Flow([(32, 25), (36, 25)], AIR, _maf()),
         Flow([(47, 32), (47, 35)], AIR, _maf()),
-        *[Flow([(12 + 17 * k, 45), (12 + 17 * k, 57)], AIR, _maf(0.25)) for k in range(4)],
-        *[Flow([(12 + 17 * k, 81), (12 + 17 * k, 89.5), (19, 89.5)], EXHAUST, _maf(0.25)) for k in range(4)],
+        *[Flow([(12 + 17 * k, 45), (12 + 17 * k, 62)], AIR, _maf(0.25)) for k in range(4)],
+        *[Flow([(12 + 17 * k, 78), (12 + 17 * k, 89.5), (19, 89.5)], EXHAUST, _maf(0.25)) for k in range(4)],
         Flow([(19, 89.5), (19, 93)], EXHAUST, _maf()),
-        Flow([(34, 101), (36, 101)], EXHAUST, _maf()),
+        Flow([(36, 101), (38, 101)], EXHAUST, _maf()),
         Flow([(52, 109), (52, 249)], EXHAUST, _maf(), "exhaust pipe to the tailpipe", "r"),
-        Flow([(10, 186), (2, 186), (2, 50), (4, 50)], FUEL, _engine_on, "fuel line", (3, 150)),
-        Flow([(96, 58), (98.2, 58), (98.2, 5), (90, 5)], HOT, _engine_on),
-        Flow([(90, 9), (99.6, 9), (99.6, 62), (96, 62)], COOL, _engine_on),
+        Flow([(10, 186), (2, 186), (2, 49), (4, 49)], FUEL, _engine_on, "fuel line", (3, 150)),
+        Flow([(96, 55), (98.2, 55), (98.2, 5), (88, 5)], HOT, _engine_on),
+        Flow([(88, 9), (99.6, 9), (99.6, 57.5), (96, 57.5)], COOL, _engine_on),
     ]
-    groups = [("Engine block (top view)", 2, 33, 68, 50),
+    part_shapes = {"air": "airbox", "throttle": "throttle", "fuel": "tank", "manifold": "manifold", "injectors": "strip4",
+                   "vvt": "gear", "ignition": "strip4", "egr": "drum", **{f"cyl{i}": "circle" for i in range(1, 5)},
+                   "crank": "pulley", "coolant": "radiator", "catalyst": "canister", "afs": "pill", "eff": "rounded",
+                   "ecu": "ecu", "service": "sump"}
+    flow_over = ("injectors", "ignition")   # seen from above, the air to each cylinder passes under these
+    groups = [("Engine (top view)", 2, 33, 96, 78),
               ("Under the rear seat", 8, 174, 40, 24)]
     poll_extra = ("map_ecm", "map_hv", "baro_hv", "baro_ecm", "eng_rpm", "eng_rpm_hv", "engine", "e_ect_obd",
                   "e_lambda", "mg1_nm", "spd_hv")
     parts = [
-        Part("air", "Air filter +\nair-flow sensor", (4, 15, 28, 16),
+        Part("air", "Air filter +\nair-flow sensor", (4, 14, 28, 17.5),
              [("Air flow into engine", "e_maf", "g/s", 1), ("Intake air temp", "e_iat", "°C", 0),
               ("Intake air temp at start", "e_iat_start", "°C", 0), ("Outside air pressure", "baro_hv", "kPa", 0)],
              (0, 1), level("e_maf", cfg.MAF_FULL_G_S),
@@ -307,29 +318,29 @@ class EngineView(CloseupView):
              tags=("", "vacuum"),
              info="Air pressure inside the intake after the throttle. Big vacuum = light load; close to outside "
                   "pressure = heavy load or engine stopped."),
-        Part("injectors", "Injectors", (4, 47, 64, 6),
+        Part("injectors", "Injectors", (4, 46.5, 64, 6),
              [("Injector open time (cyl 1)", "e_inj_us", "µs", 0), ("Fuel per 10 injections", "e_inj_vol", "ml", 2),
               ("Injector duty (calculated)", calc.injector_duty_pct, "%", 1),
               ("Fuel flow (calculated)", calc.fuel_l_per_h, "L/h", 2)],
              (0,), level("e_inj_us", cfg.INJECTOR_FULL_US),
              info="How long the fuel injector is held open each time. Longer = more fuel."),
-        Part("vvt", "Valve timing", (71, 51, 25, 14),
+        Part("vvt", "Valve\ntiming", (71, 34, 25, 24),
              [("Target", "e_vvt_aim", "%", 0), ("Solenoid effort", "e_vvt_duty", "%", 0), ("Cam shift", "e_vvt_angle", "°", 0)],
              (2,), level("e_vvt_duty", 100),
              info="Variable valve timing: the engine shifts its intake cam to trade power for efficiency. "
                   "The Prius uses very late timing (Atkinson cycle) for economy."),
-        Part("ignition", "Ignition coils", (71, 35, 25, 14),
+        Part("ignition", "Ignition coils", (4, 53, 64, 6),
              [("Ignition timing", "e_ign", "°", 1), ("Ignition count", "e_ign_count", "", 0)],
              (0,), lambda v, n: None if fresh(v, "e_ign", n) is None else (LEVEL, (fresh(v, "e_ign", n) - cfg.IGNITION_COLOUR_RANGE[0])
                                                   / (cfg.IGNITION_COLOUR_RANGE[1] - cfg.IGNITION_COLOUR_RANGE[0])),
              info="When the spark plugs fire, in degrees before the piston reaches the top. More advance = more "
                   "efficient, until the engine starts to knock."),
-        Part("egr", "EGR valve", (71, 83, 25, 12),
+        Part("egr", "EGR valve\n+ cooler", (71, 93, 25, 16),
              [("EGR valve position", "e_egr", "steps", 0)],
              (0,), level("e_egr", cfg.EGR_FULL_STEPS),
              info="Exhaust gas recirculation: feeds some cooled exhaust back into the intake to lower combustion "
                   "temperatures and pumping losses. 0 = closed."),
-        *[Part(f"cyl{i}", f"Cyl {i}", (4 + 17 * (4 - i), 57, 16, 24),
+        *[Part(f"cyl{i}", f"Cyl {i}", (4 + 17 * (4 - i), 62, 16, 16),
                [("Misfires counted", f"e_mis{i}", "", 0), ("All-cylinder misfires", "e_mis_all", "", 0),
                 ("RPM at last misfire", "e_mis_rpm", "rpm", 0)],
                (0,), lambda v, n, k=f"e_mis{i}": None if fresh(v, k, n) is None else (HEAT, fresh(v, k, n) / cfg.MISFIRE_COLOUR_FULL),
@@ -337,7 +348,7 @@ class EngineView(CloseupView):
                info="Misfires counted for this cylinder by the engine computer. 0 is what you want; a cylinder that "
                     "keeps counting up can point to a spark plug, coil or injector problem.")
           for i in range(1, 5)],
-        Part("crank", "Crankshaft", (71, 67, 25, 14),
+        Part("crank", "Crankshaft\n(pulley end)", (71, 60, 25, 24),
              [("Engine speed", first("eng_rpm", "eng_rpm_hv"), "rpm", 0), ("Target speed", "eng_target", "rpm", 0),
               ("Crank sensor", "eng_rpm_sensor", "rpm", 0), ("Engine load", "e_load", "%", 0),
               ("Power the hybrid system asks for", "e_req_kw", "kW", 1),
@@ -347,7 +358,7 @@ class EngineView(CloseupView):
              else (LEVEL, first("eng_rpm", "eng_rpm_hv")(v, n) / cfg.SPIN_MAX_RPM["engine"]),
              tags=("", "asked for"),
              info="Engine speed from several sensors, plus what the hybrid computer is asking the engine for."),
-        Part("coolant", "Radiator / coolant", (10, 2, 80, 10),
+        Part("coolant", "Radiator / coolant", (12, 2, 76, 9.5),
              [("Coolant temp", _coolant, "°C", 0), ("Engine computer", "e_ect", "°C", 0),
               ("Standard OBD", "e_ect_obd", "°C", 0), ("Dashboard meter", "e_ect_meter", "°C", 1),
               ("Climate computer", "e_ect_climate", "°C", 1), ("At start of this drive", "e_ect_start", "°C", 0),
@@ -356,12 +367,12 @@ class EngineView(CloseupView):
                                                    / (cfg.COOLANT_COLOUR_RANGE[1] - cfg.COOLANT_COLOUR_RANGE[0])),
              lambda v, n: temp_state("engine")(dict(v, engine=(_coolant(v, n), n)) if _coolant(v, n) is not None else v, n),
              info="Engine coolant temperature, as reported by four different computers (they should roughly agree)."),
-        Part("catalyst", "Catalytic\nconverter", (36, 93, 32, 16),
+        Part("catalyst", "Catalytic\nconverter", (38, 93, 30, 16),
              [("Catalyst temp", "catalyst", "°C", 0)],
              (0,), heat("catalyst", *cfg.CATALYST_COLOUR_RANGE), temp_state("catalyst"),
              info="Cleans the exhaust; it has to be hot (roughly 400 °C+) to work. Usually an estimate from the "
                   "engine computer, not a real sensor."),
-        Part("afs", "Air-fuel\nsensor", (4, 93, 30, 16),
+        Part("afs", "Air-fuel\nsensor", (4, 93, 32, 17.5),
              [("Measured mix (lambda)", "e_lambda", "", 2), ("Target mix (lambda)", "e_afr_target", "", 2),
               ("Short-term fuel trim", "e_stft", "%", 1), ("Long-term fuel trim", "e_ltft", "%", 1),
               ("Sensor voltage", "e_afs_v", "V", 2)],
@@ -487,13 +498,13 @@ def _hottest(values, now):
     return max(t) if t else None
 
 
-BLK_STEP, BLK_W = 9.7, 8.7
+BLK_STEP, BLK_W = 9.45, 8.7
 
 
 def _block_rect(i):
     """Snaking like the real series chain: blocks 1-7 left to right, then 8-14 back right to left underneath."""
     col, y = (i - 1, 42) if i <= 7 else (14 - i, 68)
-    return (5 + col * BLK_STEP, y, BLK_W, 24)
+    return (8 + col * BLK_STEP, y, BLK_W, 24)
 
 
 def _block_links():
@@ -503,7 +514,7 @@ def _block_links():
         if i < 7:
             out.append([(x + w_, y + 12), (x + BLK_STEP, y + 12)])
         elif i == 7:
-            out.append([(x + w_, 54), (72.5, 54), (72.5, 80), (x + w_, 80)])
+            out.append([(x + w_, 54), (74.2, 54), (74.2, 80), (x + w_, 80)])
         else:
             out.append([(x, 80), (x - (BLK_STEP - BLK_W), 80)])
     return out
@@ -534,24 +545,30 @@ def _fan_on(values, now):
 class BatteryView(CloseupView):
     name = "Battery"
     title = "BATTERIES close-up  ·  hybrid pack + 12 V"
-    about = ("Laid out roughly like the back of the car seen from above, front at the top: the pack sits behind the "
-             "rear seat with its cooling fan and battery computer at one end, the 12 V battery is in the cargo area, "
-             "and the DC-DC converter is up front in the inverter. Yellow arrows = current (the + and - cables "
-             "carry the real battery current to the front), blue = cooling air (speeds up with the fan). Blocks are "
-             "coloured by how far their voltage is from the pack average. Positions are approximate (training data, "
-             "unconfirmed).")
+    about = ("Laid out like the back half of the car seen from above, front at the top, driver's side on the left "
+             "(Toyota's Gen 3 emergency response guide): the pack is bolted to the cross member in the cargo area "
+             "right behind the rear seat, it breathes cabin air through the vent by the passenger-side rear seat "
+             "and the warm air leaves through the passenger-side quarter duct, the 12 V battery is on the "
+             "passenger side of the cargo area, and the DC-DC converter is up front in the inverter. Yellow arrows "
+             "= current (the + and - cables carry the real battery current forward under the floor), blue = "
+             "cooling air (speeds up with the fan). Blocks are coloured by how far their voltage is from the pack "
+             "average. The real pack is one row of 28 modules across the car; it's drawn as 2 rows of 7 blocks so "
+             "each block stays readable. Exact spots of the fan and battery computer are unconfirmed.")
     flows = [
-        Flow([(5, 54), (4.2, 54), (4.2, -1)], HV, _amps(), "+ and − cables to the booster (front)", (5, 37.5)),
-        Flow([(0.2, -1), (0.2, 80), (5, 80)], HV, _amps(), "", "r"),
+        Flow([(8, 54), (6, 54), (6, -1)], HV, _amps(), "+ and − cables to the booster (front)", "r"),
+        Flow([(3.5, -1), (3.5, 80), (8, 80)], HV, _amps(), "", "r"),
         *[Flow(pts, HV, _amps(-1)) for pts in _block_links()],
-        Flow([(83, 18), (83, 40)], AIR, _fan_air),
-        Flow([(75, 52), (73.8, 52), (73.8, 115.5), (3, 115.5)], AIR, _fan_air, "cooling air through the pack, out to the cargo area",
-             (6, 117.3)),
-        Flow([(38, 11), (67, 11), (67, 1.2), (98.6, 1.2), (98.6, 217), (96, 217)], LV, _dcdc_on, "12 V", (40, 9.3)),
+        Flow([(83, 34), (83, 40)], AIR, _fan_air),
+        Flow([(76, 52), (75.1, 52), (75.1, 115.5), (96, 115.5)], AIR, _fan_air,
+             "cooling air through the pack, out the passenger-side quarter duct", (9, 117.8)),
+        Flow([(62, 9), (98.6, 9), (98.6, 217), (96, 217)], LV, _dcdc_on, "12 V", (64, 7)),
         Flow([(98.6, 52), (96, 52)], LV, _fan_on),
     ]
-    groups = [("Rear seat", 3, 22, 94, 11),
-              ("Hybrid battery pack - 14 blocks in series (1-7 left to right, 8-14 back)", 3, 40, 70.5, 70),
+    part_shapes = {"pack": "rounded", "limits": "ecu", **{f"b{i}": "module" for i in range(1, 15)},
+                   **{f"t{i}": "pill" for i in (1, 2, 3)}, "intake": "vent", "health": "rounded", "fan": "fan",
+                   "counters": "ecu", "aux": "battery", "dcdc": "finned"}
+    groups = [("Rear seat", 9, 19, 88, 16),
+              ("Hybrid battery - 14 blocks in series (1-7, then 8-14 back)", 3, 40, 71.5, 70),
               ("Cargo area", 3, 196, 94, 42)]
     parts = [
         Part("pack", "Whole pack", (5, 121, 66, 15),
@@ -566,7 +583,7 @@ class BatteryView(CloseupView):
              lambda v, n: None if _soc(v, n) is None else ("ideal" if cfg.SOC_IDEAL[0] <= _soc(v, n) <= cfg.SOC_IDEAL[1] else "warn"),
              info="Negative current / power = charging. The Prius normally keeps the charge between about 40 and 80% "
                   "(training data, unconfirmed)."),
-        Part("limits", "Battery computer:\nlimits", (75, 68, 21, 21),
+        Part("limits", "Battery computer:\nlimits", (76, 61.5, 20, 25),
              [("Can take in", lambda v, n: None if fresh(v, "chg_lim", n) is None else abs(fresh(v, "chg_lim", n)), "kW", 0),
               ("Can give out", "dis_lim", "kW", 0), ("Charge value at start (2198, meaning unclear)", "soc_ig", "%", 1),
               ("Charge max (2198, meaning unclear)", "soc_max", "%", 1), ("Charge min (2198, meaning unclear)", "soc_min", "%", 1)],
@@ -584,14 +601,14 @@ class BatteryView(CloseupView):
                info="Each block is 2 modules of 6 nickel-metal hydride cells. A block that sits lower than the others at "
                     "rest (or higher while charging) and has higher resistance is the weak one.")
           for i in range(1, 15)],
-        *[Part(f"t{i}", f"Temp {i}", (5 + 22.3 * (i - 1), 94, 21.3, 14),
+        *[Part(f"t{i}", f"Temp {i}", (8 + 22 * (i - 1), 94, 21, 14),
                [(f"Battery temp sensor {i}", f"batt_tb{i}", "°C", 1),
                 ("Time spent too hot (counter)", "cnt_hot", "", 0)],
                (0,), heat(f"batt_tb{i}", *cfg.BATT_TEMP_COLOUR_RANGE), temp_state(f"batt_tb{i}"),
                info="One of three temperature sensors inside the hybrid battery. They should stay within a few degrees "
                     "of each other.")
           for i in (1, 2, 3)],
-        Part("intake", "Cooling air in\n(rear seat vent)", (70, 4, 26, 14),
+        Part("intake", "Cooling air in\n(rear seat vent)", (68, 20, 28, 14),
              [("Air going into the battery", "batt_intake", "°C", 1),
               ("Battery average minus this (calculated)", calc.cooling_delta_c, "°C", 1)],
              (0,), heat("batt_intake", *cfg.BATT_AIR_COLOUR_RANGE), temp_state("batt_intake"),
@@ -609,12 +626,12 @@ class BatteryView(CloseupView):
                   "(needs a 5% swing; uses the car's own charge estimate, so treat it as a trend). Live resistance = how "
                   "much each block's voltage drops per amp (slope of voltage vs current); it needs about 10 A of spread "
                   f"in current, so it appears after some accelerating/braking. Rated: {cfg.BATTERY_AH} Ah (Oak Ridge National Lab)."),
-        Part("fan", "Cooling fan", (75, 40, 21, 24),
+        Part("fan", "Cooling fan", (76, 40, 20, 20),
              [("Fan power", "fan_pct", "%", 0), ("Fan relay", "fan_relay", "on/off", 0),
               ("Fan motor voltage", "fan_volts", "V", 1), ("Fan mode", "fan_mode", "", 0)],
              (0,), level("fan_pct", 100),
              info="The battery cooling fan. It speeds up as the battery warms."),
-        Part("counters", "Battery computer:\ncounters", (75, 91, 21, 19),
+        Part("counters", "Battery computer:\ncounters", (76, 88, 20, 25),
              [("Time too LOW", "cnt_low", "", 0), ("Time DC was blocked", "cnt_dcinh", "", 0),
               ("Time too HIGH", "cnt_high", "", 0), ("Time too HOT", "cnt_hot", "", 0)],
              (0, 3), None, _counters_state,
@@ -629,7 +646,7 @@ class BatteryView(CloseupView):
              _aux_state,
              info="The small 12 V battery in the cargo area. While READY it should read about 13.5-14.5 V because the "
                   "DC-DC converter is charging it."),
-        Part("dcdc", "DC-DC converter\n(front, in inverter)", (4, 3, 34, 16),
+        Part("dcdc", "DC-DC converter\n(front, in inverter)", (22, 2, 40, 14),
              [("Effort", "dcdc_duty", "%", 0), ("High-voltage input", "vl", "V", 0),
               ("Told to stop", "dcdc_prohibit", "on/off", 0)],
              (0,), level("dcdc_duty", 100),
@@ -666,6 +683,7 @@ class TripView(CloseupView):
     name = "Trip"
     units = [("C", "°C"), ("F", "°F")]
     title = "TRIP  ·  since the app started (or the last reset)"
+    default_shape = "rounded"
     about = ("Running totals worked out from the live readings. They're only as good as how often each reading "
              "arrives (every ~1-2 s), so short events like quick stops are approximate. Fuel is estimated from air "
              f"flow (E10 gas), braking energy from the car's speed and weight ({cfg.CURB_KG:,} kg + {cfg.DRIVER_KG} kg driver).")

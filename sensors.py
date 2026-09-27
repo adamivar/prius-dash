@@ -396,9 +396,10 @@ class Poller(threading.Thread):
     """Reads the current view's sensors over and over, and every other view's sensors in the
     background every few seconds. Latest values land in self.values."""
 
-    def __init__(self, sensors, port=cfg.PORT, demo=False):
+    def __init__(self, sensors, port=cfg.PORT, demo=False, link=None):
         super().__init__(daemon=True)
         self.port = port
+        self.link = link          # optional function returning a serial-like connection (Android Bluetooth)
         self.demo = demo
         self.lock = threading.Lock()
         self.values = {}          # key -> (value, time.time())
@@ -458,7 +459,7 @@ class Poller(threading.Thread):
             self._set_status("pyserial is not installed - run:\npython -m pip install pyserial")
             return
         while not self.stop_flag.is_set():
-            elm = Elm327(self.port)
+            elm = Elm327(self.port, link=self.link)
             try:
                 self._set_status(f"connecting to {self.port}...")
                 elm.open()

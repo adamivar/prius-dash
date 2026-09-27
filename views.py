@@ -40,57 +40,97 @@ class Cell:
 
 
 # ---------- one map of the car, shared by every view ----------
-# 100 x 250 units, front at the top, driver (left-hand drive) on the left. Positions approximate (training data).
-# Left channel x 4-16 is kept free for wires; inverter assembly + transmission sit at x 16-52, engine at x 55-92.
-L, M, R = 16, 34.5, 52          # left column: left edge, middle split, right edge
-HALF = 17.5
-BATT_X0, BATT_X1, BATT_Y0 = 16, 88, 160
+# 100 x 250 units (about 18 mm per unit), front at the top, driver (left-hand drive) on the left.
+# Where things are on a real 2010-2015 Prius (Toyota's Gen 3 emergency response guide unless marked):
+#  - engine on the passenger side, transaxle (MG1 + MG2 + planetary gear) on the driver side, the inverter
+#    assembly (booster, both inverters, DC-DC converter) sitting on top of the transaxle
+#  - engine intake manifold at the front, exhaust manifold + catalytic converter at the back by the firewall
+#    (Toyota repair manual: the EGR cooler bolts to the exhaust manifold's catalyst); air box on top, centre of the bay
+#  - brake actuator deep under the inverter / cowl by the driver-side fender (repair steps: remove cowl + inverter)
+#  - Gen 3 meter (warning lights) in the centre of the dashboard, next to the windshield
+#  - fuel tank under the centre of the car (under the rear seat); HV battery mounted to the cross member in the
+#    cargo area behind the rear seat, its cooling air coming in by the passenger-side rear seat
+#  - 12 V battery on the passenger side of the cargo area
+# Drawing compromises (so every box stays readable): the inverter assembly is drawn in front of the transaxle
+# instead of on top of it, the engine bay is ~25% longer than the real one, the battery blocks are shown as two
+# rows of 7 (the real pack is one row of 28 modules across the car), and the ring gear is drawn as a strip under
+# the two motors although it sits between them on the same shaft.
+# Left channel x 4-14 is kept free for wires (12 V, HV -, HV +).
+L, M, R = 14, 35, 56            # driver-side column (transaxle + inverter): left edge, middle split, right edge
+HALF = 20
+E0, EW = 58, 34                 # passenger-side column (engine): left edge, width
+FRONT_AXLE, REAR_AXLE = 58, 202  # real wheelbase 2.70 m; front overhang stretched with the engine bay
+WHEEL_H = 32                     # 195/65R15 tire is ~0.63 m tall
+BATT_X0, BATT_X1, BATT_Y0, BATT_ROW2 = 14, 88, 187, 20
 BLK_W = (BATT_X1 - BATT_X0 - 6 * 2) / 7    # 14 blocks, 2 rows of 7, 2-unit gaps
 TB_W = (BATT_X1 - BATT_X0 - 2 * 1.5) / 3   # 3 battery temperature sensors across the same pack
+WHEELS_RECT = {"fl": (-1, FRONT_AXLE - WHEEL_H / 2, 7, WHEEL_H), "fr": (94, FRONT_AXLE - WHEEL_H / 2, 7, WHEEL_H),
+               "rl": (-1, REAR_AXLE - WHEEL_H / 2, 7, WHEEL_H), "rr": (94, REAR_AXLE - WHEEL_H / 2, 7, WHEEL_H)}
 LAYOUT = {
-    "coolant_pump": (L, 1.5, HALF, 12),
-    "outside_air": (34, 3, 28, 9),
-    "ac_compressor": (66, 4, 26, 9),
-    "dcdc": (L, 15, HALF, 12),
-    "inv_coolant": (M, 15, HALF, 12),
-    "booster": (L, 30, R - L, 15),
-    "booster_upper": (L, 30, HALF, 15),
-    "booster_lower": (M, 30, HALF, 15),
-    "gen_inverter": (L, 51, HALF, 17),
-    "drive_inverter": (M, 51, HALF, 17),
-    "mg1": (L, 78, HALF, 20),
-    "mg2": (M, 78, HALF, 20),
-    "ring_gear": (L, 100, R - L, 10),
+    # front, behind the bumper
+    "dcdc": (L, 3.5, 17, 13),                # DC-DC converter: in the bottom front of the inverter assembly
+    "outside_air": (L, 3.5, HALF, 13),         # outside air sensor behind the bumper (exact spot unconfirmed)
+    "coolant_pump": (L + 18, 3.5, R - L - 18, 13),        # inverter coolant pump, front driver side (unconfirmed)
+    "inv_coolant": (M, 3.5, HALF, 13),         # inverter coolant loop (pump / reservoir end)
+    "ac_compressor": (60, 3.5, 26, 13),        # electric A/C compressor, low on the front of the engine
+    # inverter assembly (on top of the transaxle), each inverter above the motor it drives
+    "booster": (L, 18.5, R - L, 13),
+    "booster_upper": (L, 18.5, HALF, 13),
+    "booster_lower": (M, 18.5, HALF, 13),
+    "drive_inverter": (L, 32.5, HALF, 13),
+    "gen_inverter": (M, 32.5, HALF, 13),
+    # transaxle across the car on the front axle line: MG2 at the outer end, MG1 next to the engine
+    "mg2": (L, 51.5, HALF, 21.5),
+    "mg1": (M, 51.5, HALF, 21.5),
+    "ring_gear": (L, 74, R - L, 10),
+    "brake_actuator": (L, 74, R - L, 10.5),
+    # engine: air box on top at the front, block, catalytic converter at the back against the firewall
+    "intake_air": (E0, 17.5, EW, 9),
+    "engine": (E0, 27.5, EW, 42.5),
+    "catalyst": (E0, 71, EW, 13),
+    "intake_manifold": (E0, 27.5, EW, 14),  # Pressure view: front of the engine
+    "oil_pressure": (E0, 56, EW, 13),
     # the wheels themselves (same rectangles the app draws as tires)
-    "wheel_fl": (-1, 36, 7, 24), "wheel_fr": (94, 36, 7, 24),
-    "wheel_rl": (-1, 196, 7, 24), "wheel_rr": (94, 196, 7, 24),
-    "intake_air": (55, 16, 37, 9),
-    "engine": (55, 28, 37, 56),
-    "catalyst": (55, 87, 37, 13),
-    "cabin_air": (16, 131, 22, 13),
-    "evaporator": (40, 131, 22, 13),
-    "batt_intake": (64, 141, 26, 15),
-    "batt_tb1": (BATT_X0, BATT_Y0, TB_W, 39),
-    "batt_tb2": (BATT_X0 + TB_W + 1.5, BATT_Y0, TB_W, 39),
-    "batt_tb3": (BATT_X0 + 2 * (TB_W + 1.5), BATT_Y0, TB_W, 39),
-    "aux_batt": (64, 211, 26, 16),
-    # engine parts shown in the Pressure view sit on top of the engine's own spot
-    "intake_manifold": (55, 28, 37, 13),
-    "oil_pressure": (55, 70, 37, 12),
-    "fuel_tank": (L, 146, 36, 11),
-    # dashboard warning lights (2 rows of 3) and the brake lights at the back
-    **{f"lamp{i}": (64 + (i % 3) * 9.5, 127.5 + (i // 3) * 6.5, 8.5, 5.5) for i in range(6)},
-    "brake_light_l": (6, 237, 10, 7), "brake_light_r": (84, 237, 10, 7),
+    **{f"wheel_{k}": r for k, r in WHEELS_RECT.items()},
+    # dashboard: driver side, centre meter with the warning lights (2 rows of 3), air-con unit in the middle
+    "steering_wheel": (15, 99, 18, 18),
+    "cabin_air": (L, 99, 22, 13),           # cabin temperature sensor in the dash near the steering column
+    "evaporator": (39, 99, 22, 13),         # air-con evaporator inside the heater / A/C unit behind the dash
+    **{f"lamp{i}": (36.25 + (i % 3) * 9.5, 99 + (i // 3) * 6.5, 8.5, 5.5) for i in range(6)},
+    # rear seat: fuel tank under it, battery cooling-air intake by the passenger-side seat
+    "fuel_tank": (16, 166, 44, 11),
+    "batt_intake": (64, 168, 26, 13),
+    "batt_tb1": (BATT_X0, BATT_Y0, TB_W, 16 + BATT_ROW2),
+    "batt_tb2": (BATT_X0 + TB_W + 1.5, BATT_Y0, TB_W, 16 + BATT_ROW2),
+    "batt_tb3": (BATT_X0 + 2 * (TB_W + 1.5), BATT_Y0, TB_W, 16 + BATT_ROW2),
+    # cargo area: 12 V battery passenger side, brake lights in the rear corners
+    "aux_batt": (52, 234, 22, 12),
+    "brake_light_l": (14, 240, 10, 5.5), "brake_light_r": (76, 240, 10, 5.5),
 }
-LAYOUT["batt_fan"] = LAYOUT["batt_intake"]
-LAYOUT["steering_wheel"] = (18, 132, 17, 17)   # driver side, behind the dashboard line
-LAYOUT["brake_actuator"] = (60, 100, 30, 12)   # brake actuator, engine bay near the firewall   # the fan sits in the battery's air-intake duct
+LAYOUT["batt_fan"] = LAYOUT["batt_intake"]   # the fan sits in the battery's air-intake duct
+
+# What each place looks like from above (see shapes.py)
+PLACE_SHAPE = {
+    "dcdc": "finned", "outside_air": "rounded", "coolant_pump": "rounded", "inv_coolant": "tank", "ac_compressor": "drum",
+    "booster": "finned", "booster_upper": "finned", "booster_lower": "finned", "drive_inverter": "finned",
+    "gen_inverter": "finned", "mg2": "drum", "mg1": "drum", "ring_gear": "rack", "brake_actuator": "valveblock",
+    "intake_air": "airbox", "engine": "engine", "catalyst": "canister", "intake_manifold": "manifold",
+    "oil_pressure": "pill", **{f"wheel_{k}": "tire" for k in WHEELS_RECT}, "steering_wheel": "circle",
+    "cabin_air": "pill", "evaporator": "core", **{f"lamp{i}": "lamp" for i in range(6)}, "fuel_tank": "tank",
+    "batt_intake": "vent", "batt_fan": "fan", "batt_tb1": "pack", "batt_tb2": "pack", "batt_tb3": "pack",
+    "aux_batt": "battery", "brake_light_l": "taillight_l", "brake_light_r": "taillight_r",
+}
+
+
+def placed(places):
+    """(key, place) pairs -> the view's components [(key, x, y, w, h)] and their shapes {key: shape}."""
+    return [(key, *LAYOUT[place]) for key, place in places], {key: PLACE_SHAPE[place] for key, place in places}
 
 
 def block_rect(i):
     """Block i (0-13), snaking: top row blocks 1-7 left to right, bottom row blocks 8-14 right to left."""
     col = i if i < 7 else 13 - i
-    return BATT_X0 + col * (BLK_W + 2), BATT_Y0 if i < 7 else BATT_Y0 + 23, BLK_W, 16
+    return BATT_X0 + col * (BLK_W + 2), BATT_Y0 if i < 7 else BATT_Y0 + BATT_ROW2, BLK_W, 16
 
 
 def block_links():
@@ -99,7 +139,8 @@ def block_links():
     for i in range(13):
         x, y, w_, h = block_rect(i)
         if i == 6:  # block 7 (top right) down to block 8 (bottom right)
-            out.append([(x + w_, y + h / 2), (x + w_ + 2, y + h / 2), (x + w_ + 2, y + 23 + h / 2), (x + w_, y + 23 + h / 2)])
+            out.append([(x + w_, y + h / 2), (x + w_ + 1, y + h / 2), (x + w_ + 1, y + BATT_ROW2 + h / 2),
+                        (x + w_, y + BATT_ROW2 + h / 2)])
         elif i < 6:
             out.append([(x + w_, y + h / 2), (x + w_ + 2, y + h / 2)])
         else:       # bottom row runs right to left
@@ -166,11 +207,11 @@ class TemperatureView:
     units = [("C", "Celsius (°C)"), ("F", "Fahrenheit (°F)")]
 
     groups = [  # dashed outlines: (label, x, y, w, h)
-        ("Inverter assembly", L - 2, 13, R - L + 4, 57),
-        ("Transmission", L - 2, 76, R - L + 4, 36),
-        ("Hybrid battery (under rear seat)", BATT_X0 - 2, BATT_Y0 - 2, BATT_X1 - BATT_X0 + 4, 43),
+        ("Inverter assembly", L - 1, 17.5, R - L + 2, 29),
+        ("Transaxle", L - 1, 50.5, R - L + 2, 23.5),
+        ("Hybrid battery (behind rear seat)", BATT_X0 - 1.5, BATT_Y0 - 1.5, BATT_X1 - BATT_X0 + 3, 16 + BATT_ROW2 + 3),
     ]
-    components = [(key, *LAYOUT[place]) for key, place in [  # (sensor key, place on the car)
+    places = [  # (sensor key, place on the car)
         ("ambient", "outside_air"), ("inv_coolant", "inv_coolant"),
         ("inv_mg1", "gen_inverter"), ("inv_mg2", "drive_inverter"),
         ("boost_upper", "booster_upper"), ("boost_lower", "booster_lower"),
@@ -179,7 +220,8 @@ class TemperatureView:
         ("cabin", "cabin_air"), ("evap", "evaporator"), ("batt_intake", "batt_intake"),
         ("batt_tb1", "batt_tb1"), ("batt_tb2", "batt_tb2"), ("batt_tb3", "batt_tb3"),
         ("aux_batt", "aux_batt"),
-    ]]
+    ]
+    components, shapes = placed(places)
 
     def __init__(self):
         self.unit = "C"
@@ -282,7 +324,7 @@ ELEC_INFO = {
                   "The electronically controlled brake unit. Its solenoid valves meter brake fluid to the wheels "
                   "and blend friction braking with regen. One of the few 12 V parts with a real current reading."),
     "hvbatt": ("Hybrid battery",
-               "The big battery under the rear seat (nickel-metal hydride, about 200 V, 14 blocks). "
+               "The big battery in the cargo area, right behind the rear seat (nickel-metal hydride, about 200 V, 14 blocks). "
                "It gives power when you pull away or accelerate and takes power back when braking "
                "or when the engine charges it."),
     "boost": ("Voltage booster",
@@ -364,35 +406,42 @@ class ElectricalView:
     name = "Electrical"
     units = [("V", "Volts"), ("A", "Amps"), ("W", "Watts")]
     groups = []
-    components = [(key, *LAYOUT[place]) for key, place in [  # (part key, place on the car)
+    places = [  # (part key, place on the car)
         ("dcdc", "dcdc"), ("ac", "ac_compressor"), ("boost", "booster"),
         ("inv1", "gen_inverter"), ("inv2", "drive_inverter"), ("mg1", "mg1"), ("mg2", "mg2"),
         ("aux", "aux_batt"), ("pump", "coolant_pump"), ("fan", "batt_fan"), ("brake_act", "brake_actuator"),
         ("lamp_mil", "lamp0"), ("lamp_abs", "lamp1"), ("lamp_brake", "lamp2"),
         ("lamp_slip", "lamp3"), ("lamp_ecb", "lamp4"), ("buzzer", "lamp5"),
         ("brake_l", "brake_light_l"), ("brake_r", "brake_light_r"),
-    ]] + [(f"blk{i + 1:02d}", *block_rect(i)) for i in range(14)]
-    notes = [("Hybrid battery (under rear seat) - 14 blocks in series", 52, BATT_Y0 + 46),
-             ("Warning lights", 78, 124)]
+    ]
+    components, shapes = placed(places)
+    components += [(f"blk{i + 1:02d}", *block_rect(i)) for i in range(14)]
+    shapes.update({f"blk{i + 1:02d}": "module" for i in range(14)})
+    PACK_BOTTOM = BATT_Y0 + BATT_ROW2 + 16
+    notes = [("Hybrid battery (behind rear seat) - 14 blocks in series", 50, PACK_BOTTOM + 7),
+             ("Warning lights (centre meter)", 50, 112)]
+    # 12 V runs down the far left (x 5.5), the HV cables from the battery under the floor next to it (- x 8.5, + x 11.5)
+    LV_X, MINUS_X, PLUS_X, RIGHT_X = 5.5, 8.5, 11.5, 91.5
     # (wire key, points drawn in the "positive" current direction, label, where the label goes:
     #  "l"/"r" = beside the longest segment, or (x, y) = fixed spot, text to the right)
     wire_paths = [
-        ("plus", [(L, 168), (13, 168), (13, 42), (L, 42)], "+ out", (15, 104)),
-        ("minus", [(L, 33), (9.5, 33), (9.5, 191), (L, 191)], "− return", (15, 110)),
+        ("plus", [(BATT_X0, BATT_Y0 + 8), (PLUS_X, BATT_Y0 + 8), (PLUS_X, 28), (L, 28)], "+ out", (13, 140)),
+        ("minus", [(L, 22), (MINUS_X, 22), (MINUS_X, BATT_Y0 + BATT_ROW2 + 8), (BATT_X0, BATT_Y0 + BATT_ROW2 + 8)],
+         "− return", (13, 145.5)),
         *[("link", pts, "", "r") for pts in block_links()],
-        ("vh_gen", [(L + HALF / 2, 45), (L + HALF / 2, 51)], "", "r"),
-        ("vh_drive", [(M + HALF / 2, 45), (M + HALF / 2, 51)], "", "r"),
-        ("ac_gen", [(L + HALF / 2, 68), (L + HALF / 2, 78)], "", "r"),
-        ("ac_drive", [(M + HALF / 2, 68), (M + HALF / 2, 78)], "", "r"),
-        ("ac_comp", [(R, 37), (58, 37), (58, 9), (66, 9)], "DC", "r"),
-        ("dcdc", [(L + HALF / 2, 30), (L + HALF / 2, 27)], "", "r"),
-        ("lv12", [(L, 21), (6, 21), (6, 219), (64, 219)], "12 V - not measured", (20, 216)),
+        ("vh_drive", [(L + HALF / 2, 31.5), (L + HALF / 2, 32.5)], "", "r"),
+        ("vh_gen", [(M + HALF / 2, 31.5), (M + HALF / 2, 32.5)], "", "r"),
+        ("ac_drive", [(L + HALF / 2, 45.5), (L + HALF / 2, 51.5)], "", "r"),
+        ("ac_gen", [(M + HALF / 2, 45.5), (M + HALF / 2, 51.5)], "", "r"),
+        ("ac_comp", [(R, 25), (57.5, 25), (57.5, 10), (60, 10)], "DC", "r"),
+        ("dcdc", [(L + HALF / 2, 18.5), (L + HALF / 2, 16.5)], "", "r"),
+        ("lv12", [(L, 10), (LV_X, 10), (LV_X, 237), (52, 237)], "12 V - not measured", (13, 151)),
         # 12 V things that only report on/off: dashed, with slow arrows while they're on
-        ("lv_pump", [(6, 21), (6, 7.5), (L, 7.5)], "", "r"),
-        ("lv_fan", [(90, 219), (93, 219), (93, 148.5), (90, 148.5)], "", "r"),
-        ("lv_brake_l", [(11, 219), (11, 237)], "", "r"),
-        ("lv_brake_r", [(77, 227), (77, 240.5), (84, 240.5)], "", "r"),
-        ("lv_brake_act", [(93, 148.5), (93, 106), (90, 106)], "", "r"),
+        ("lv_pump", [(L + 17, 10), (L + 18, 10)], "", "r"),
+        ("lv_fan", [(74, 237), (RIGHT_X, 237), (RIGHT_X, 174.5), (90, 174.5)], "", "r"),
+        ("lv_brake_l", [(19, 237), (19, 240)], "", "r"),
+        ("lv_brake_r", [(74, 242.75), (76, 242.75)], "", "r"),
+        ("lv_brake_act", [(RIGHT_X, 174.5), (RIGHT_X, 79.25), (R, 79.25)], "", "r"),
     ]
     LAMPS = {  # key: (box text, colour when on, is it a warning?)
         "lamp_mil": ("ENG", cfg.LAMP_AMBER, True), "lamp_abs": ("ABS", cfg.LAMP_AMBER, True),
@@ -422,7 +471,7 @@ class ElectricalView:
         return None if None in amps else sum(amps)
 
     SHORT = {"brake_act": "Brake\nactuator", "dcdc": "DC-DC", "inv1": "Generator\ninverter", "inv2": "Drive\ninverter",
-             "mg1": "Generator\n(MG1)", "mg2": "Drive motor\n(MG2)", "pump": "Pump", "fan": "Battery fan"}
+             "mg1": "Generator\n(MG1)", "mg2": "Drive motor\n(MG2)", "pump": "Inverter\ncoolant pump", "fan": "Battery fan"}
 
     def label(self, key):
         if key.startswith("blk"):
@@ -448,7 +497,7 @@ class ElectricalView:
         cin, cout = fresh(values, "chg_lim", now), fresh(values, "dis_lim", now)
         if cin is not None and cout is not None:
             text += f"   ·   can take in {abs(cin):.0f} kW / give {cout:.0f} kW"
-        return [dict(rect=(BATT_X0, BATT_Y0 + 41, BATT_X1 - BATT_X0, 4), fraction=None if soc is None else soc / 100,
+        return [dict(rect=(BATT_X0, self.PACK_BOTTOM + 2, BATT_X1 - BATT_X0, 4), fraction=None if soc is None else soc / 100,
                      colour=colour, text=text, marks=(lo / 100, hi / 100))]
 
     @staticmethod
@@ -613,7 +662,7 @@ class ElectricalView:
         for i, (key, pts, kind, side) in enumerate(self.wire_paths):
             if key == "lv_brake_act":
                 a = self.brake_amps(values, now)
-                out[i] = (pts, a, "" if a is None else f"12 V · {a:.2f} A", (61, 114), None)
+                out[i] = (pts, a, "" if a is None else f"12 V · {a:.2f} A", (59, 76.5), None)
                 continue
             if key in active:
                 out[i] = (pts, None, kind, side, bool(active[key]))
@@ -820,14 +869,14 @@ SPIN_INFO = {
     "mg2": ("Drive motor (MG2)", "Drive motor\n(MG2)",
             "Geared straight to the front wheels (about 8.6 turns per wheel turn), so its speed is really just "
             "road speed. Negative = reversing."),
-    "ring": ("Planetary ring gear", "Ring gear (calculated)",
+    "ring": ("Planetary ring gear (calculated)", "Ring gear",
              "The output of the power-split planetary gear: engine drives the planet carrier, the generator is "
              "the sun gear, and the ring gear goes to the wheels. It isn't measured - it's calculated two ways "
              "so you can see if the gear numbers are right."),
     "ac": ("A/C compressor", "A/C\ncompressor",
            "Electric A/C compressor motor. It changes speed to match how much cooling is needed, and stops "
            "when the A/C isn't needed."),
-    "pump": ("Inverter coolant pump", "Pump",
+    "pump": ("Inverter coolant pump", "Inverter\ncoolant pump",
              "Small electric pump that circulates coolant through the inverter and motors (a separate loop "
              "from the engine's)."),
     "steer": ("Steering wheel", "Steering",
@@ -855,14 +904,17 @@ def fmt_nm(t):
 class SpinView:
     name = "Spinning"
     units = [("rpm", "RPM")]
-    groups = [("Transmission", L - 2, 76, R - L + 4, 36)]
+    groups = [("Transaxle", L - 1, 50.5, R - L + 2, 34.5)]
     notes = []
-    components = [(key, *LAYOUT[place]) for key, place in [
+    places = [   # tires first, so a steered front tire tucks under the parts next to it
+        ("fl", "wheel_fl"), ("fr", "wheel_fr"), ("rl", "wheel_rl"), ("rr", "wheel_rr"),
         ("engine", "engine"), ("mg1", "mg1"), ("mg2", "mg2"), ("ring", "ring_gear"),
         ("ac", "ac_compressor"), ("pump", "coolant_pump"), ("fan", "batt_fan"),
-        ("fl", "wheel_fl"), ("fr", "wheel_fr"), ("rl", "wheel_rl"), ("rr", "wheel_rr"),
         ("steer", "steering_wheel"),
-    ]]
+    ]
+    components, shapes = placed(places)
+    shapes.update({k: "tread" for k in WHEELS})     # tires show their tread rolling instead of a rotor
+    shapes["ring"] = "geartread"                    # so does the ring gear (it turns about the same axis)
     STEER_MAX = cfg.STEER_MAX_DEG
 
     def __init__(self):
@@ -983,6 +1035,10 @@ class SpinView:
                      (f"Turning radius right now (speed ÷ turning rate): "
                       f"{'--' if calc.turning_radius_m(values, now) is None else f'{calc.turning_radius_m(values, now):.0f} m'}",
                       TIP_FG, 10, True),
+                     *([] if a is None else [(
+                         "Front wheels turned (calculated): left {:.1f}°, right {:.1f}° - the inside wheel turns more "
+                         "(Ackermann geometry, full lock set by the 5.2 m turning radius)".format(
+                             *(abs(x) for x in calc.front_wheel_angles_deg(a))), TIP_FG, 10, False)]),
                      (f"Full lock is about {self.STEER_MAX}° (measured in your car). Note: Toyota lists 2.84 turns "
                       "lock-to-lock (about ±511°), so this angle reading may be scaled differently.", TIP_FG, 10, False),
                      (info, TIP_FG, 10, False),
@@ -1105,6 +1161,8 @@ class SpinView:
             c.create_line(i, 0, i, int(16 * app.ui), fill=ramp(SPIN_REV, i / (cfg.LEGEND_WIDTH * app.ui)))
         panel_label(parent, "Purple = turning backwards", DIM, 9)
         panel_label(parent, "The rotor icons spin with the part (slowed down).\n"
+                            "Tires: the tread rolls towards the front going forwards.\n"
+                            "Ring gear: its teeth slide left to right going forwards.\n"
                             "Thicker + redder rotor = more twisting force (torque).", TEXT, 9, (6, 0))
         self.rows = reading_rows(parent, self.PANEL_ROWS, "Readings (rpm)")
         panel_label(parent, "All readings answered in your car's full test (2026-09-26)\nWheels use the stock 195/65R15 tire\n"
@@ -1161,9 +1219,10 @@ class PressureView:
     units = [("kPa", "kPa"), ("psi", "psi"), ("bar", "bar")]
     groups = []
     notes = []
-    components = [(key, *LAYOUT[place]) for key, place in [
+    places = [
         ("baro", "outside_air"), ("map", "intake_manifold"), ("ac", "ac_compressor"),
-    ]]
+    ]
+    components, shapes = placed(places)
 
     def __init__(self):
         self.unit = "kPa"
