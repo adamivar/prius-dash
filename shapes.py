@@ -8,7 +8,7 @@ import math
 
 SHAPES = ("box", "rounded", "finned", "drum", "canister", "pill", "circle", "gear", "throttle", "rack", "valveblock",
           "airbox", "engine", "manifold", "tank", "radiator", "core", "vent", "fan", "pack", "module", "battery",
-          "tire", "tread", "geartread", "lamp", "taillight_l", "taillight_r", "ecu", "sump", "strip4", "pulley")
+          "tire", "tread", "geartread", "lamp", "taillight_l", "taillight_r", "ecu", "sump", "strip4", "pulley", "gauge")
 
 
 def mix(hex_a, hex_b, t):
@@ -73,6 +73,8 @@ def text_box(kind, x, y, w, h):
         return x, y + h * 0.05, w, h * 0.9
     if kind == "ecu":
         return x, y, w, h * 0.92
+    if kind == "gauge":                # a dial drawn by the view above, the text underneath
+        return x, y + h * 0.8, w, h * 0.2
     return x, y, w, h
 
 
@@ -247,6 +249,8 @@ def draw(c, kind, x0, y0, x1, y1, fill, outline, width, dash=None, s=4.0, tags=(
             body([(x0 + cut, y0), (x1, y0), (x1, y1), (x0, y1), (x0, y0 + cut)])
         else:
             body([(x0, y0), (x1 - cut, y0), (x1, y0 + cut), (x1, y1), (x0, y1)])
+    elif kind == "gauge":              # instrument panel; the view draws the dial itself
+        body(_round_rect(x0, y0, x1, y1, min(w, h) * 0.08))
     elif kind == "ecu":                # control unit: box with a connector along the bottom
         body(_round_rect(x0, y0, x1, y1 - h * 0.05, min(w, h) * 0.08))
         c.create_rectangle(x0 + w * 0.25, y1 - h * 0.08, x1 - w * 0.25, y1, fill=det, outline="", tags=tags)

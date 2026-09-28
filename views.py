@@ -37,6 +37,7 @@ class Cell:
     text: str
     state: str = None      # None, "ideal" (green border) or "warn" (flashing red border)
     dashed: bool = False   # dashed outline = this value isn't measured
+    ring: str = None       # colour of a thick outline ring (e.g. ABS working on a wheel); flashing red wins
 
 
 # ---------- one map of the car, shared by every view ----------
@@ -96,7 +97,12 @@ LAYOUT = {
     "steering_wheel": (15, 99, 18, 18),
     "cabin_air": (L, 99, 22, 13),           # cabin temperature sensor in the dash near the steering column
     "evaporator": (39, 99, 22, 13),         # air-con evaporator inside the heater / A/C unit behind the dash
-    **{f"lamp{i}": (36.25 + (i % 3) * 9.5, 99 + (i // 3) * 6.5, 8.5, 5.5) for i in range(6)},
+    **{f"lamp{i}": (36 + (i % 3) * 9.5, 99 + (i // 3) * 6.5, 9.2, 5.5) for i in range(9)},
+    # climate: fresh / recirculate door and heater blend door (both in the heater unit behind the dash), sun sensor on
+    # top of the dash at the windshield
+    "air_inlet": (63, 99, 27, 13),
+    "blend_door": (39, 114, 22, 13),
+    "sun_sensor": (41, 87.5, 18, 6.5),
     # rear seat: fuel tank under it, battery cooling-air intake by the passenger-side seat
     "fuel_tank": (16, 166, 44, 11),
     "batt_intake": (64, 168, 26, 13),
@@ -116,7 +122,8 @@ PLACE_SHAPE = {
     "gen_inverter": "finned", "mg2": "drum", "mg1": "drum", "ring_gear": "rack", "brake_actuator": "valveblock",
     "intake_air": "airbox", "engine": "engine", "catalyst": "canister", "intake_manifold": "manifold",
     "oil_pressure": "pill", **{f"wheel_{k}": "tire" for k in WHEELS_RECT}, "steering_wheel": "circle",
-    "cabin_air": "pill", "evaporator": "core", **{f"lamp{i}": "lamp" for i in range(6)}, "fuel_tank": "tank",
+    "cabin_air": "pill", "evaporator": "core", **{f"lamp{i}": "lamp" for i in range(9)}, "fuel_tank": "tank",
+    "air_inlet": "vent", "blend_door": "rounded", "sun_sensor": "pill",
     "batt_intake": "vent", "batt_fan": "fan", "batt_tb1": "pack", "batt_tb2": "pack", "batt_tb3": "pack",
     "aux_batt": "battery", "brake_light_l": "taillight_l", "brake_light_r": "taillight_r",
 }
@@ -201,6 +208,68 @@ def reading_rows(parent, rows, title):
 # ======================================================================
 # Temperature view
 # ======================================================================
+# ---------- climate doors + sun sensor (shown in the Temperature view) ----------
+CLIMATE = {  # key: (box label, title)
+    "inlet": ("Air inlet", "Air inlet door (fresh / recirculate)"),
+    "blend": ("Heater mix", "Heater blend door"),
+    "sun": ("Sun", "Sun sensor"),
+}
+CLIMATE_KEYS = ("mix_target", "mix_pos", "outlet_pos", "inlet_target", "inlet_pos", "solar", "blower")
+
+
+def blend_pct(pulses):
+    lo, hi = cfg.BLEND_PULSES
+    return max(0.0, min(100.0, (pulses - lo) / (hi - lo) * 100))
+
+
+def climate_cell(key, values, now):
+    g = lambda k: fresh(values, k, now)
+    if key == "inlet":
+        v = g("inlet_pos")
+        if v is None:
+            return Cell(NO_DATA, "--")
+        recirc = v > cfg.INLET_RECIRC_ABOVE
+        return Cell("#2d3f55" if recirc else "#2a5a3c", "Recirculate" if recirc else "Fresh air")
+    if key == "blend":
+        v = g("mix_pos")
+        if v is None:
+            return Cell(NO_DATA, "--")
+        pct = blend_pct(v)
+        return Cell(ramp(HEAT, pct / 100), f"{pct:.0f}% hot")
+    v = g("solar")
+    if v is None:
+        return Cell(NO_DATA, "--")
+    return Cell(ramp(HEAT, v / 255 * 0.8), f"{v:.0f}")
+
+
+def climate_tooltip(key, values, now):
+    g = lambda k: fresh(values, k, now)
+    num = lambda k: "--" if g(k) is None else f"{g(k):.0f}"
+    title = CLIMATE[key][1]
+    if key == "inlet":
+        lines = [(f"Door position: {num('inlet_pos')} pulses (target {num('inlet_target')})", TIP_FG, 11, True),
+                 (f"Above {cfg.INLET_RECIRC_ABOVE} pulses is shown as recirculate. GUESS from your car's test: 19 "
+                  "during max A/C, 7-10 otherwise (unconfirmed).", TIP_FG, 10, False),
+                 ("The door behind the glovebox that picks outside air or recirculates cabin air.", TIP_FG, 10, False)]
+    elif key == "blend":
+        out, mix, fan = g("outlet_pos"), g("mix_pos"), g("blower")
+        vents = "--" if out is None else ("feet" if out < cfg.OUTLET_FEET_BELOW else "face")
+        hot = "--" if mix is None else f"{blend_pct(mix):.0f}% hot"
+        lines = [(f"Blend door: {num('mix_pos')} pulses (target {num('mix_target')}) = {hot}", TIP_FG, 11, True),
+                 (f"Air outlet door: {num('outlet_pos')} pulses - probably {vents} (GUESS: 47 normal, 17 with the "
+                  "heater on hot in your car's test)", TIP_FG, 10, False),
+                 (f"Cabin fan: {'--' if fan is None else f'level {fan:.0f} of 31'}", TIP_FG, 10, False),
+                 (f"0% = all air through the A/C evaporator (cold), 100% = all through the heater core. Scale from "
+                  f"your car's test: {cfg.BLEND_PULSES[0]} pulses full cold, {cfg.BLEND_PULSES[1]} heater hot.",
+                  TIP_FG, 10, False)]
+    else:
+        lines = [(f"Sunlight: {num('solar')} of 255", TIP_FG, 11, True),
+                 ("The sensor on top of the dash at the windshield. The climate system blows cooler when the sun "
+                  "is on the car. Read 0 in your car's test (evening).", TIP_FG, 10, False)]
+    lines.append(("Climate computer 7C4 - answered in your car's test (2026-09-26)", DIM, 8, False))
+    return title, lines
+
+
 class TemperatureView:
     name = "Temperature"
     notes = []
@@ -219,7 +288,7 @@ class TemperatureView:
         ("intake_air", "intake_air"), ("engine", "engine"), ("catalyst", "catalyst"),
         ("cabin", "cabin_air"), ("evap", "evaporator"), ("batt_intake", "batt_intake"),
         ("batt_tb1", "batt_tb1"), ("batt_tb2", "batt_tb2"), ("batt_tb3", "batt_tb3"),
-        ("aux_batt", "aux_batt"),
+        ("aux_batt", "aux_batt"), ("inlet", "air_inlet"), ("blend", "blend_door"), ("sun", "sun_sensor"),
     ]
     components, shapes = placed(places)
 
@@ -227,9 +296,11 @@ class TemperatureView:
         self.unit = "C"
 
     def sensors(self):
-        return TEMPS
+        return TEMPS + [SENSORS[k] for k in CLIMATE_KEYS]
 
     def label(self, key):
+        if key in CLIMATE:
+            return CLIMATE[key][0]
         return SENSORS[key].label
 
     def conv(self, c):
@@ -246,6 +317,8 @@ class TemperatureView:
         return "ideal" if lo <= v <= hi else None
 
     def cell(self, key, values, now):
+        if key in CLIMATE:
+            return climate_cell(key, values, now)
         s = SENSORS[key]
         r = values.get(key)
         if r is None:
@@ -259,6 +332,8 @@ class TemperatureView:
         return []
 
     def tooltip(self, key, values, now):
+        if key in CLIMATE:
+            return climate_tooltip(key, values, now)
         s = SENSORS[key]
         lo, hi = s.ideal
         lines = []
@@ -398,6 +473,15 @@ def elec_state(values, now):
 # Block voltage difference from the pack average: ideal within 0.15 V, flashing red from 0.3 V (unconfirmed)
 
 
+def drive_mode(mode, short=False):
+    """MG1 / MG2 inverter control mode byte -> words."""
+    if mode is None:
+        return "--"
+    names = {0: ("PWM", "PWM (normal)"), 1: ("variable PWM", "variable PWM (overmodulation)"),
+             2: ("square wave", "square wave (full voltage)")}
+    return names.get(int(mode), (f"mode {mode:.0f}", f"mode {mode:.0f}"))[0 if short else 1]
+
+
 def fmt_watts(w_):
     return f"{w_ / 1000:.1f} kW" if abs(w_) >= 1000 else f"{w_:.0f} W"
 
@@ -412,6 +496,7 @@ class ElectricalView:
         ("aux", "aux_batt"), ("pump", "coolant_pump"), ("fan", "batt_fan"), ("brake_act", "brake_actuator"),
         ("lamp_mil", "lamp0"), ("lamp_abs", "lamp1"), ("lamp_brake", "lamp2"),
         ("lamp_slip", "lamp3"), ("lamp_ecb", "lamp4"), ("buzzer", "lamp5"),
+        ("lamp_cruise", "lamp6"), ("lamp_belt", "lamp7"),
         ("brake_l", "brake_light_l"), ("brake_r", "brake_light_r"),
     ]
     components, shapes = placed(places)
@@ -419,7 +504,7 @@ class ElectricalView:
     shapes.update({f"blk{i + 1:02d}": "module" for i in range(14)})
     PACK_BOTTOM = BATT_Y0 + BATT_ROW2 + 16
     notes = [("Hybrid battery (behind rear seat) - 14 blocks in series", 50, PACK_BOTTOM + 7),
-             ("Warning lights (centre meter)", 50, 112)]
+             ("Warning lights (centre meter)", 50, 118.5)]
     # 12 V runs down the far left (x 5.5), the HV cables from the battery under the floor next to it (- x 8.5, + x 11.5)
     LV_X, MINUS_X, PLUS_X, RIGHT_X = 5.5, 8.5, 11.5, 91.5
     # (wire key, points drawn in the "positive" current direction, label, where the label goes:
@@ -448,6 +533,7 @@ class ElectricalView:
         "lamp_brake": ("BRAKE", cfg.LAMP_RED, True), "lamp_slip": ("SLIP", cfg.LAMP_AMBER, True),
         "lamp_ecb": ("ECB", cfg.LAMP_RED, True), "buzzer": ("BUZZ", cfg.LAMP_AMBER, True),
         "brake_l": ("", cfg.BRAKE_LIGHT_ON, False), "brake_r": ("", cfg.BRAKE_LIGHT_ON, False),
+        "lamp_cruise": ("CRUISE", cfg.LAMP_GREEN, False), "lamp_belt": ("BELT", cfg.LAMP_GREEN, False),
     }
     FLAGS = {  # extra on/off signals that belong to a part: shown in its hover, bad ones make it flash red
         "boost": [("conv_gate", False), ("conv_shutdown", True), ("conv_fail", True), ("ov_conv", True)],
@@ -462,7 +548,15 @@ class ElectricalView:
         self.unit = "A"
 
     def sensors(self):
-        return ELEC + ONOFF + [SOC] + ELEC_EXTRA + [SENSORS[k] for k in ("fan_pct", "fan_relay", "fan_volts", "pump_rpm")]
+        return ELEC + ONOFF + [SOC] + ELEC_EXTRA + [SENSORS[k] for k in (
+            "fan_pct", "fan_relay", "fan_volts", "pump_rpm", "mg1_mode", "mg2_mode", "mg1_khz", "mg2_khz", "cc_on",
+            "cc_active", "cc_set", "cc_res", "cc_setsw", "cc_cancel", "belt_p")]
+
+    LAMP_SENSOR = {"brake_l": "brake_lights", "brake_r": "brake_lights", "lamp_cruise": "cc_on", "lamp_belt": "belt_p"}
+
+    def lamp_on(self, key, values, now):
+        """Is this dashboard lamp lit?"""
+        return self.on(values, now, self.LAMP_SENSOR.get(key, key))
 
     SOLENOIDS = ("sol_sla", "sol_slr", "sol_ssc", "sol_scc", "sol_smc", "sol_src")
 
@@ -589,10 +683,12 @@ class ElectricalView:
         if key.startswith("blk"):
             return self.block_cell(key, values, now)
         if key in self.LAMPS:
-            on = self.on(values, now, "brake_lights" if key in ("brake_l", "brake_r") else key)
+            on = self.lamp_on(key, values, now)
             _, colour, warning = self.LAMPS[key]
             if on is None:
                 return Cell(NO_DATA, "", dashed=True)
+            if key == "lamp_cruise" and on and not self.on(values, now, "cc_active"):
+                colour = cfg.LAMP_GREEN_DIM      # switched on but not holding a speed
             dark = cfg.BRAKE_LIGHT_OFF if key in ("brake_l", "brake_r") else cfg.LAMP_OFF
             return Cell(colour if on else dark, "", "warn" if on and warning else None)
         if key == "pump":
@@ -679,12 +775,17 @@ class ElectricalView:
         "brake_r": "The brake lights at the back. On while the brake pedal is pressed.",
         "pump": "Electric pump for the inverter/motor coolant loop. Runs on the 12 V system.",
         "fan": "Hybrid battery cooling fan. Runs on the 12 V system; the car reports how hard it drives it (%).",
+        "lamp_cruise": "Cruise control. Dim green = switched on, bright green = holding a set speed. UNCONFIRMED: "
+                       "these bits didn't change when the ON button was pressed in Park in your car's test "
+                       "(2026-09-26) - it may only react in READY or while driving.",
+        "lamp_belt": "Passenger seatbelt buckle switch (lit = buckled). The driver's buckle isn't in the data. "
+                     "UNCONFIRMED: it didn't change when the belt was buckled in your car's test (2026-09-26).",
     }
 
     def onoff_tooltip(self, key, values, now):
         g = lambda k: fresh(values, k, now)
-        sensor_key = {"brake_l": "brake_lights", "brake_r": "brake_lights", "pump": "pump_on", "fan": "fan_relay"}.get(key, key)
-        on = self.on(values, now, sensor_key) if key != "fan" else self.on(values, now, "fan_relay")
+        sensor_key = dict(self.LAMP_SENSOR, pump="pump_on", fan="fan_relay").get(key, key)
+        on = self.lamp_on(key, values, now) if key in self.LAMPS else self.on(values, now, sensor_key)
         lines = [(f"Right now: {'--' if on is None else ('ON' if on else 'off')}", TIP_FG, 11, True)]
         if key == "pump" and g("pump_rpm") is not None:
             duty = g("pump_duty")
@@ -694,14 +795,23 @@ class ElectricalView:
             pct, volts = g("fan_pct"), g("fan_volts")
             lines.append((f"Effort: {'--' if pct is None else f'{pct:.0f}%'}     "
                           f"Fan motor voltage: {'--' if volts is None else f'{volts:.1f} V'}", TIP_FG, 10, False))
+        if key == "lamp_cruise":
+            sp = g("cc_set")
+            lever = [n for n, k in (("RES/ACC", "cc_res"), ("SET/COAST", "cc_setsw"), ("CANCEL", "cc_cancel"))
+                     if self.on(values, now, k)]
+            lines.append((f"Holding a speed: {'--' if g('cc_active') is None else ('yes' if g('cc_active') >= 0.5 else 'no')}"
+                          f"     Set speed: {'--' if sp is None else f'{sp:.0f} km/h'}", TIP_FG, 10, False))
+            lines.append((f"Lever pressed: {', '.join(lever) if lever else 'none'}", TIP_FG, 10, False))
         lines.append((self.ONOFF_INFO[key], TIP_FG, 10, False))
-        lines.append(("Current isn't measured - only whether it's on. Arrows on its wire move at a fixed slow "
-                      "speed while it's on.", DIM, 9, False))
+        if key not in ("lamp_cruise", "lamp_belt"):
+            lines.append(("Current isn't measured - only whether it's on. Arrows on its wire move at a fixed slow "
+                          "speed while it's on.", DIM, 9, False))
         s = SENSORS[sensor_key]
         lines.append((f"{s.tech} · request {s.pid} to {s.header} · "
                       + ("tested in your car" if s.tested else "NOT yet tested in your car"), DIM, 8, False))
         title = {"brake_l": "Brake lights", "brake_r": "Brake lights", "pump": "Inverter coolant pump",
-                 "fan": "Battery cooling fan"}.get(key, SENSORS[key].name if key in SENSORS else key)
+                 "fan": "Battery cooling fan", "lamp_cruise": "Cruise control",
+                 "lamp_belt": "Passenger seatbelt"}.get(key, SENSORS[key].name if key in SENSORS else key)
         return title, lines
 
     def tooltip(self, key, values, now):
@@ -761,6 +871,14 @@ class ElectricalView:
             rpm, nm = g(f"mg{n}_rpm"), g(f"mg{n}_nm")
             lines.append((f"Speed: {'--' if rpm is None else f'{rpm:.0f} rpm'}     "
                           f"Torque: {'--' if nm is None else f'{nm:.0f} Nm'}", TIP_FG, 10, True))
+        if key in ("mg1", "mg2", "inv1", "inv2"):
+            n = "1" if key in ("mg1", "inv1") else "2"
+            mode, khz = g(f"mg{n}_mode"), g(f"mg{n}_khz")
+            lines.append((f"Inverter drive mode: {drive_mode(mode)}     Switching at: "
+                          f"{'--' if khz is None else f'{khz:.2f} kHz'}", TIP_FG, 10, True))
+            lines.append(("PWM = normal chopping for low / medium power; variable PWM = more voltage from the same "
+                          "switching; square wave = full voltage for high speed / high power, least switching loss.",
+                          DIM, 9, False))
         if key == "ac":
             if g("ac_watts") is None:
                 lines.append(("A/C power reading (217D) hasn't answered yet", DIM, 10, False))
@@ -794,7 +912,8 @@ class ElectricalView:
                   ("p2", "Drive motor (− = generating)"),
                   ("pac", "A/C power"), ("dcdc", "DC-DC effort"), ("aux", "12V battery"),
                   ("spread", "Block spread"), ("lim", "Battery power limits"), ("brake", "Brake actuator"),
-                  ("regen", "Regen delivered vs asked"), ("loss", "Losses + 12 V load (rough)")]
+                  ("regen", "Regen delivered vs asked"), ("loss", "Losses + 12 V load (rough)"),
+                  ("mode1", "Generator drive mode"), ("mode2", "Drive motor drive mode"), ("cruise", "Cruise control")]
 
     def build_panel(self, parent, app):
         unit_buttons(parent, self, app)
@@ -829,6 +948,10 @@ class ElectricalView:
             "brake": "--" if self.brake_amps(values, now) is None else f"{self.brake_amps(values, now):.2f} A",
             "soc": "--" if g("soc") is None else f"{g('soc'):.1f}%",
             "dcdc": "--" if g("dcdc_duty") is None else f"{g('dcdc_duty'):.0f}%",
+            "mode1": drive_mode(g("mg1_mode"), short=True), "mode2": drive_mode(g("mg2_mode"), short=True),
+            "cruise": "--" if g("cc_on") is None else ("off" if g("cc_on") < 0.5 else (
+                f"holding {g('cc_set'):.0f} km/h" if (g("cc_active") or 0) >= 0.5 and g("cc_set") is not None
+                else "on, not set")),
         }
         for k, lbl in self.rows.items():
             lbl.config(text=vals[k], fg=DIM if vals[k] == "--" else TEXT)
@@ -858,6 +981,8 @@ SPIN_LIMITS = {   # (rpm at full colour, ideal range as text) - numbers from con
 # Max torque (Nm) = thickest, reddest rotor. Training-data estimates (unconfirmed).
 TORQUE_MAX = cfg.TORQUE_MAX_NM
 WHEELS = ("fl", "fr", "rl", "rr")
+WHEEL_BRAKE_KEYS = ([f"abs_{k}" for k in WHEELS] + [f"vsc_{k}" for k in WHEELS] + [f"wacc_{k}" for k in WHEELS]
+                    + ["trc", "trc_brk"])
 
 SPIN_INFO = {
     "engine": ("Engine", "Engine\n(crankshaft)",
@@ -921,7 +1046,13 @@ class SpinView:
         self.unit = "rpm"
 
     def sensors(self):
-        return ROT + TORQUE + STEER
+        return ROT + TORQUE + STEER + [SENSORS[k] for k in WHEEL_BRAKE_KEYS]
+
+    @staticmethod
+    def wheel_helped(key, values, now):
+        """Is ABS, stability or traction control working this wheel right now?"""
+        on = lambda k: (fresh(values, k, now) or 0) >= 0.5
+        return on(f"abs_{key}") or on(f"vsc_{key}") or (key in ("fl", "fr") and (on("trc") or on("trc_brk")))
 
     @staticmethod
     def steer_angle(values, now):
@@ -1011,6 +1142,8 @@ class SpinView:
         tq, _ = self.torques(values, now)
         out = [(k, rpm[k], None if tq.get(k) is None else min(1.0, abs(tq[k]) / TORQUE_MAX[k]))
                for k, *_ in self.components if k in rpm and rpm[k] is not None]
+        # a wheel that ABS / stability / traction control is working gets fully red tread
+        out = [(k, r, 1.0 if k in WHEELS and self.wheel_helped(k, values, now) else t) for k, r, t in out]
         pct = fresh(values, "fan_pct", now)
         if pct is not None:  # not real RPM - the rotor just follows the fan's % power
             out.append(("fan", pct * cfg.FAN_RPM_PER_PCT, None))
@@ -1113,8 +1246,14 @@ class SpinView:
                           f"Off by {diff:.0f} rpm - gear numbers may be wrong, or readings taken at different moments",
                           cfg.TIP_GREEN if diff <= cfg.GEAR_CHECK_RPM else cfg.TIP_AMBER, 10, True))
         if key in WHEELS:
-            kmh = g(f"whl_{key}")
-            lines.append((f"Wheel speed sensor: {'--' if kmh is None else f'{kmh:.1f} km/h'}", TIP_FG, 10, False))
+            kmh, acc = g(f"whl_{key}"), g(f"wacc_{key}")
+            lines.append((f"Wheel speed sensor: {'--' if kmh is None else f'{kmh:.1f} km/h'}     Wheel acceleration: "
+                          f"{'--' if acc is None else f'{acc:+.1f} m/s²'.replace('-', '−')}", TIP_FG, 10, False))
+            flags = [n for n, k in (("ABS", f"abs_{key}"), ("stability control", f"vsc_{key}"),
+                                    ("traction control", "trc" if key in ("fl", "fr") else None)) if k and (g(k) or 0) >= 0.5]
+            lines.append((("Working this wheel now: " + ", ".join(flags)) if flags else
+                          "ABS / stability / traction control: not working this wheel", cfg.TIP_RED if flags else TIP_FG,
+                          10, bool(flags)))
             state, dev = self.wheel_state(key, rpm)
             if dev is not None:
                 lines.append((f"{abs(dev) * 100:.1f}% {'faster' if dev > 0 else 'slower'} than the average wheel",
@@ -1163,7 +1302,8 @@ class SpinView:
         panel_label(parent, "The rotor icons spin with the part (slowed down).\n"
                             "Tires: the tread rolls towards the front going forwards.\n"
                             "Ring gear: its teeth slide left to right going forwards.\n"
-                            "Thicker + redder rotor = more twisting force (torque).", TEXT, 9, (6, 0))
+                            "Thicker + redder rotor = more twisting force (torque).\n"
+                            "Fully red tread = ABS / traction / stability control\nis working that wheel.", TEXT, 9, (6, 0))
         self.rows = reading_rows(parent, self.PANEL_ROWS, "Readings (rpm)")
         panel_label(parent, "All readings answered in your car's full test (2026-09-26)\nWheels use the stock 195/65R15 tire\n"
                             "Battery fan is shown in %, not rpm (no rpm reading)\n"

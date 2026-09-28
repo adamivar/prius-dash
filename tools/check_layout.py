@@ -17,6 +17,7 @@ import config as cfg  # noqa: E402
 import shapes  # noqa: E402
 from closeups import BatteryView, EngineView, TripView  # noqa: E402
 from merged import EverythingView  # noqa: E402
+from brakes import BrakesView  # noqa: E402
 from sensors import SENSORS, demo_electrical  # noqa: E402
 from views import ElectricalView, PressureView, SpinView, TemperatureView  # noqa: E402
 
@@ -97,7 +98,8 @@ def main():
     samples = [demo_values(1_000_000 + t * 0.5, p, smooth) for t in range(100) for p in (0, math.pi)]
     problems = 0
 
-    for view in (TemperatureView(), ElectricalView(), SpinView(), PressureView(), EverythingView(), EngineView(), BatteryView(),
+    for view in (TemperatureView(), ElectricalView(), SpinView(), PressureView(), BrakesView(), EverythingView(), EngineView(),
+                 BatteryView(),
                  TripView()):
         car = getattr(view, "scene", "car") != "closeup"
         comps = list(view.components)

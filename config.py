@@ -127,6 +127,14 @@ ROTOR_TORQUE_BASE = 0.25         # how red a rotor is at zero torque
 LAMP_AMBER = "#ffb000"
 LAMP_RED = "#ff3030"
 LAMP_OFF = "#1b1c20"
+LAMP_GREEN = "#34c759"
+LAMP_GREEN_DIM = "#1f6b35"
+LAMP_BLUE = "#3d8bff"
+# Brakes & grip view: rings around a wheel while a safety system is working it
+RING_ABS = "#ff3b30"             # ABS
+RING_VSC = "#ff9500"             # stability control
+RING_TRC = "#ffd60a"             # traction control
+RING_EBD = "#5ac8fa"             # rear brake balancing (EBD)
 BRAKE_LIGHT_ON = "#ff2020"
 BRAKE_LIGHT_OFF = "#3a0d0d"
 ON_OFF_FILL = 0.45               # Electrical view: how yellow an "on" part is when its current isn't measured
@@ -310,3 +318,14 @@ MPG_FROM_L100KM = 235.215        # US mpg = 235.215 / (L/100 km)
 L_PER_US_GAL = 3.785411784
 MI_PER_KM = 0.621371
 MPG_ENGINE_OFF = 999.0           # shown as mpg when moving with the engine off ("infinite")
+
+# ---------- Brakes & grip view, climate doors, dashboard ----------
+BRAKE_V_RANGE = (0.47, 2.5)      # brake pressure sensor volts: released .. hard stop [MEASURED 2026-09-26: 0.47..2.41]
+BRAKE_PRESSED_V = 0.7            # above this the brakes count as applied (unconfirmed)
+G_FULL_MS2 = 7.85                # g-ball edge = 0.8 g
+G_TRAIL_S = 3.0                  # the g-ball leaves a trail this long
+WHEEL_ACC_FULL = 6.0             # wheel acceleration (m/s²) at full colour in the Brakes view
+WHEEL_SLIP_WARN = 4.7            # |wheel acceleration| from this (3 sensor steps, ~0.5 g) counts as spin / lock-up
+BLEND_PULSES = (6, 93)           # heater blend door: full cold .. full hot [MEASURED 2026-09-26: 6 cold, 93 heater hot]
+INLET_RECIRC_ABOVE = 15          # air inlet door pulses above this = recirculate [GUESS: 19 during max A/C, 7-10 otherwise]
+OUTLET_FEET_BELOW = 30           # air outlet door pulses below this = feet [GUESS: 17 heater hot, 47 normal]

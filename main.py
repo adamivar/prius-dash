@@ -26,6 +26,7 @@ from kivy.uix.scrollview import ScrollView                 # noqa: E402
 from kivy.uix.spinner import Spinner                       # noqa: E402
 
 import config as cfg                                       # noqa: E402
+from brakes import BrakesView                              # noqa: E402
 from calc import TRACKER                                   # noqa: E402
 from closeups import BatteryView, EngineView, TripView     # noqa: E402
 from merged import EverythingView                          # noqa: E402
@@ -49,8 +50,8 @@ class PriusApp(App):
 
     def build(self):
         self.ui = max(1.0, Metrics.density * 0.8)   # line widths / spacing (1.0 = a 96 dpi PC screen)
-        self.views = [TemperatureView(), ElectricalView(), SpinView(), PressureView(), EverythingView(), EngineView(),
-                      BatteryView(), TripView()]
+        self.views = [TemperatureView(), ElectricalView(), SpinView(), PressureView(), BrakesView(), EverythingView(),
+                      EngineView(), BatteryView(), TripView()]
         self.settings = self._load()
         self.view = next((v for v in self.views if v.name == self.settings.get("view")), self.views[0])
         self.poller = None

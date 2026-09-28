@@ -245,11 +245,29 @@ def _trim_state(values, now):
     return "ideal" if abs(l) <= cfg.FUEL_TRIM_IDEAL and abs(s) <= cfg.FUEL_TRIM_IDEAL else None
 
 
+COMM_KEYS = ("e_comm_hv", "e_comm_brake", "e_comm_ac")
+
+
 def _ecu_state(values, now):
+    """Red if the check-engine light is on, a code is stored, or it can't hear another computer."""
     mil, dtc = fresh(values, "lamp_mil", now), fresh(values, "dtc_now", now)
+    comm = [fresh(values, k, now) for k in COMM_KEYS]
     if mil is None and dtc is None:
         return None
-    return "warn" if (mil or 0) >= 0.5 or (dtc or 0) > 0 else "ideal"
+    lost = any(c is not None and c < 0.5 for c in comm)
+    return "warn" if (mil or 0) >= 0.5 or (dtc or 0) > 0 or lost else "ideal"
+
+
+def _yes_no(key):
+    return lambda v, n: None if fresh(v, key, n) is None else ("yes" if fresh(v, key, n) >= 0.5 else "NO")
+
+
+BATT_MODES = {1: "driving", 2: "current-sensor calibration", 3: "external charging", 4: "shutting down"}
+
+
+def _batt_mode(values, now):
+    m = fresh(values, "batt_mode", now)
+    return None if m is None else BATT_MODES.get(int(m), f"mode {m:.0f}")
 
 
 def _oil_state(values, now):
@@ -289,7 +307,8 @@ class EngineView(CloseupView):
     flow_over = ("injectors", "ignition")   # seen from above, the air to each cylinder passes under these
     groups = [("Engine (top view)", 2, 33, 96, 78),
               ("Under the rear seat", 8, 174, 40, 24)]
-    poll_extra = ("map_ecm", "map_hv", "baro_hv", "baro_ecm", "eng_rpm", "eng_rpm_hv", "engine", "e_ect_obd",
+    poll_extra = ("e_comm_hv", "e_comm_brake", "e_comm_ac", "map_ecm", "map_hv", "baro_hv", "baro_ecm", "eng_rpm",
+                  "eng_rpm_hv", "engine", "e_ect_obd",
                   "e_lambda", "mg1_nm", "spd_hv")
     parts = [
         Part("air", "Air filter +\nair-flow sensor", (4, 14, 28, 17.5),
@@ -399,9 +418,17 @@ class EngineView(CloseupView):
              [("Check-engine light", "lamp_mil", "on/off", 0), ("Trouble codes stored now", "dtc_now", "", 0),
               ("Trouble codes in history", "dtc_hist", "", 0), ("Time since READY", "e_runtime", "s", 0),
               ("Warm-up requested", "e_warmup", "on/off", 0), ("Fuel cut for engine stop", "e_fc_stop", "on/off", 0),
-              ("Forced on (maintenance / racing mode)", "e_racing", "on/off", 0)],
+              ("Forced on (maintenance / racing mode)", "e_racing", "on/off", 0),
+              ("Hears the hybrid computer", _yes_no("e_comm_hv"), "", 0),
+              ("Hears the brake computer", _yes_no("e_comm_brake"), "", 0),
+              ("Hears the climate computer", _yes_no("e_comm_ac"), "", 0),
+              ("Warm-ups since codes were cleared", "dtc_warmups", "", 0),
+              ("Distance since codes were cleared", "dtc_km", "km", 0),
+              ("Time since codes were cleared", "dtc_min", "min", 0)],
              (0, 1), None, _ecu_state, tags=("check-engine light", "trouble codes"),
-             info="What the engine computer is doing and whether it has stored any faults."),
+             info="What the engine computer is doing, whether it has stored any faults, and whether it can hear the "
+                  "other computers (any 'NO' turns the box red). 'Since codes were cleared' counts from the last "
+                  "time trouble codes were erased (or the 12 V battery was disconnected)."),
         Part("service", "Oil (sump)", (4, 120, 34, 16),
              [("Distance since oil-change reset", "oil_km", "km", 0)],
              (0,), level("oil_km", cfg.OIL_COLOUR_FULL_KM), _oil_state,
@@ -544,6 +571,7 @@ def _fan_on(values, now):
 
 class BatteryView(CloseupView):
     name = "Battery"
+    poll_extra = ("batt_mode",)
     title = "BATTERIES close-up  ·  hybrid pack + 12 V"
     about = ("Laid out like the back half of the car seen from above, front at the top, driver's side on the left "
              "(Toyota's Gen 3 emergency response guide): the pack is bolted to the cross member in the cargo area "
@@ -633,11 +661,14 @@ class BatteryView(CloseupView):
              info="The battery cooling fan. It speeds up as the battery warms."),
         Part("counters", "Battery computer:\ncounters", (76, 88, 20, 25),
              [("Time too LOW", "cnt_low", "", 0), ("Time DC was blocked", "cnt_dcinh", "", 0),
-              ("Time too HIGH", "cnt_high", "", 0), ("Time too HOT", "cnt_hot", "", 0)],
+              ("Time too HIGH", "cnt_high", "", 0), ("Time too HOT", "cnt_hot", "", 0),
+              ("Battery computer mode", _batt_mode, "", 0),
+              ("Asking for the fan on standby", "batt_standby", "on/off", 0)],
              (0, 3), None, _counters_state,
              tags=("too low", "too hot"),
              info="Counters the battery computer keeps of how long the battery spent in bad conditions. 0 everywhere "
-                  "is ideal. Units aren't documented."),
+                  "is ideal. Units aren't documented. Mode: normally 'driving'; 'current-sensor calibration' "
+                  "happens briefly at start-up."),
         Part("aux", "12V battery", (58, 204, 38, 26),
              [("Voltage (hybrid computer)", "aux_volts", "V", 2), ("Voltage (battery computer)", "aux_v2", "V", 2),
               ("Voltage (dashboard meter)", "aux_v3", "V", 1), ("Temperature", "aux_batt", "°C", 0)],

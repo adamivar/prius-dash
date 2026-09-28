@@ -170,6 +170,8 @@ class Scene:
             cell = self.view.cell(key, values, now)
             if cell.state == "warn":
                 outline, width = (WARN if self.blink else cfg.OUTLINE), 3
+            elif cell.ring:
+                outline, width = cell.ring, max(3, int(4 * self.ui))
             elif cell.state == "ideal":
                 outline, width = IDEAL, 3
             else:
@@ -233,10 +235,28 @@ class Scene:
             if bar["text"]:
                 c.create_text((x0 + x1) / 2, (y0 + y1) / 2, text=bar["text"], fill=TEXT, font=(f, fs_tiny, "bold"))
 
+        for d in (self.view.decorations(values, now) if hasattr(self.view, "decorations") else []):
+            self.decoration(d, fs_small)
+
         self.draw_arrows()
         self.draw_rotors()
         if self.hover:
             self.draw_tooltip(values, now)
+
+    def decoration(self, d, fs_small):
+        """Extra drawing a view asks for, in drawing units: circle / line / text (e.g. the g-ball)."""
+        c, s = self.c, self.scales()[0]
+        kind = d["kind"]
+        if kind == "circle":
+            (x, y), r = self.pt(d["x"], d["y"]), d["r"] * s
+            c.create_oval(x - r, y - r, x + r, y + r, fill=d.get("fill", ""), outline=d.get("outline", ""),
+                          width=d.get("width", 1) * self.ui)
+        elif kind == "line":
+            pts = [v for p in d["pts"] for v in self.pt(*p)]
+            c.create_line(*pts, fill=d["fill"], width=d.get("width", 1) * self.ui, dash=d.get("dash"))
+        elif kind == "text":
+            c.create_text(*self.pt(d["x"], d["y"]), text=d["text"], fill=d.get("fill", DIM), anchor=d.get("anchor", "center"),
+                          font=(self.font, fs_small))
 
     def draw_tooltip(self, values, now):
         key, mx, my = self.hover

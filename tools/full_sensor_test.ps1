@@ -43,6 +43,31 @@
         @('7E0','0132','Fuel tank vapour pressure'),
         @('7E0','0133','Barometric pressure'),
         @('7E0','013C','Catalyst temp'),
+        @('7E0','0104','Engine load (standard OBD)'),
+        @('7E0','0106','Short-term fuel trim (standard OBD)'),
+        @('7E0','0107','Long-term fuel trim (standard OBD)'),
+        @('7E0','010D','Vehicle speed (standard OBD)'),
+        @('7E0','010E','Ignition timing (standard OBD)'),
+        @('7E0','010F','Intake air temp (standard OBD)'),
+        @('7E0','0110','Air flow (standard OBD)'),
+        @('7E0','0111','Throttle position (standard OBD)'),
+        @('7E0','0115','Rear oxygen sensor B1S2 voltage (standard OBD)'),
+        @('7E0','011F','Run time since start (standard OBD)'),
+        @('7E0','0121','Distance with check-engine light on (standard OBD)'),
+        @('7E0','012C','Commanded EGR (standard OBD)'),
+        @('7E0','012E','Commanded evap purge (standard OBD)'),
+        @('7E0','0130','Warm-ups since codes cleared (standard OBD)'),
+        @('7E0','0131','Distance since codes cleared (standard OBD)'),
+        @('7E0','0134','Front air-fuel sensor lambda B1S1 (standard OBD)'),
+        @('7E0','013E','Catalyst temp B1S2 (standard OBD)'),
+        @('7E0','0142','Engine computer supply voltage (standard OBD)'),
+        @('7E0','0143','Absolute engine load (standard OBD)'),
+        @('7E0','0144','Commanded air-fuel ratio lambda (standard OBD)'),
+        @('7E0','0145','Relative throttle position (standard OBD)'),
+        @('7E0','0147','Throttle position B (standard OBD)'),
+        @('7E0','014C','Commanded throttle actuator (standard OBD)'),
+        @('7E0','014D','Minutes with check-engine light on (standard OBD)'),
+        @('7E0','014E','Minutes since codes cleared (standard OBD)'),
         @('7E0','0140','Supported standard PIDs 41-60'),
         @('7E0','0160','Supported standard PIDs 61-80'),
         @('7E0','2101','Calculated Load_7E0, Vehicle Load, Mass Air Flow +7 more'),
@@ -248,13 +273,16 @@
         Do-Step 'A/C COLD' 'Release the parking brake. Turn the A/C ON, temperature COLDEST, fan HIGH. Wait 20 seconds.' $climate
         Do-Step 'HEATER HOT' 'Now A/C OFF, temperature HOTTEST, fan HIGH. Wait 20 seconds.' $climate
         Do-Step 'HEADLIGHTS' 'Turn the climate back to normal. Turn the HEADLIGHTS ON.' $meter
+        Do-Step 'ENGINE RUNNING (standard OBD)' ('Lights off. Stay in PARK. Press the gas pedal about HALFWAY so ' +
+            'the engine runs, and hold.') @('7E0 0104','7E0 0106','7E0 0107','7E0 010D','7E0 010E','7E0 010F','7E0 0110','7E0 0111','7E0 0115','7E0 011F','7E0 0121','7E0 012C','7E0 012E','7E0 0130','7E0 0131','7E0 0134','7E0 013E','7E0 0142','7E0 0143','7E0 0144','7E0 0145','7E0 0147','7E0 014C','7E0 014D','7E0 014E') 3
         Do-Step 'GAS PEDAL IN PARK' 'Lights off. Stay in PARK. Press the gas pedal about HALFWAY and hold (the engine may start).' `
             @('7E2 2101','7E2 2141','7E0 2101','7E0 2103','7E0 2149','7E0 010C','7E2 2161','7E2 2167') 4
         Do-Step 'STEERING LEFT' 'Let go of the gas. Turn the steering wheel all the way LEFT and hold.' @('7B0 2106','7B0 2146','7B0 2147')
         Do-Step 'STEERING RIGHT' 'Now turn it all the way RIGHT and hold.' @('7B0 2106','7B0 2146','7B0 2147')
         Do-Step 'REVERSE GEAR' 'Straighten the wheel. Foot on the brake, shift to REVERSE (R) and stay stopped.' `
             @('7E2 2141','7E2 2162','7B0 211F','7C0 21AC')
-        Do-Step 'CRUISE BUTTON' 'Shift back to PARK. Press the cruise control ON button (end of the cruise lever).' @('7E2 2121')
+        Do-Step 'CRUISE BUTTON' ('Shift back to PARK and make sure the car is in READY. Press the cruise control ON ' +
+            'button (end of the cruise lever) and check the cruise light comes on in the dash.') @('7E2 2121')
         Do-Step 'PASSENGER SEATBELT' 'Buckle the PASSENGER seat belt (or unbuckle it if it was buckled).' @('7C0 2112')
         Do-Timed 'SLOW DRIVE (optional)' ("ONLY in a safe, empty place. After you press Enter, put the laptop down, drive slowly`n" +
             "(under 20 km/h), then brake gently to a stop. It records for 30 seconds and beeps at the start and the end.`n" +

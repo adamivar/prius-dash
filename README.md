@@ -13,11 +13,12 @@ hybrid battery. It also works out fuel economy, engine efficiency, battery healt
 
 | View | What it shows |
 |---|---|
-| **Temperature** | Top-down car with every part that reports a temperature (motors, inverters, booster, engine, catalytic converter, hybrid battery, cabin, A/C...). Boxes get redder as they get closer to their danger limit. |
-| **Electrical** | Battery, booster, inverters, motors, A/C compressor, 12 V system and all 14 battery blocks with animated wires: arrow direction = current direction, speed and thickness = amps. Volts / Amps / Watts. Warning lights, brake lights, battery charge and power limits. |
+| **Temperature** | Top-down car with every part that reports a temperature (motors, inverters, booster, engine, catalytic converter, hybrid battery, cabin, A/C...). Boxes get redder as they get closer to their danger limit. Climate doors too: fresh-air / recirculate, heater blend (% hot) and the sun sensor. |
+| **Electrical** | Battery, booster, inverters, motors, A/C compressor, 12 V system and all 14 battery blocks with animated wires: arrow direction = current direction, speed and thickness = amps. Volts / Amps / Watts. Warning lights, brake lights, battery charge and power limits. Motor inverter drive mode (PWM / square wave) and switching frequency; cruise and passenger-seatbelt lamps (unconfirmed). |
 | **Spinning** | Everything that turns, in RPM: engine, both motor-generators, the planetary ring gear (calculated), all 4 wheels, A/C compressor, coolant pump, battery fan, plus the steering wheel at its real angle. Rotors spin with the part and get thicker/redder with torque. |
 | **Pressure** | Intake manifold (and engine vacuum), outside air pressure (and a rough altitude), A/C refrigerant pressure. kPa / psi / bar. |
-| **Everything** | The Temperature, Electrical, Spinning and Pressure views laid over one car. Each part merges every reading it has: fill colour = temperature (or current / speed), rotors + rolling tread = speed and torque, a thin top-edge bar = pressure, wire arrows = current, flashing red border if any reading is near danger. Hovering shows every reading from every view. A few parts move so nothing overlaps (outside air beside the air box, brake actuator at the cowl, battery temperatures as a strip along the pack). |
+| **Brakes** | Brakes and grip from above: each wheel coloured by how fast it speeds up / slows down (wheelspin and lock-up stand out) with a ring while ABS, stability control, traction control or rear brake balancing works it; brake pressure and regen blending at the actuator; brake lines that show arrows while you brake; a g-ball (braking g from the g-sensor, sideways g from speed x turning rate) with a trail; brake-assist and warning lamps; the brake computer's wiring checks and fluid-level switch. |
+| **Everything** | The Temperature, Electrical, Spinning, Pressure and Brakes views laid over one car. Each part merges every reading it has: fill colour = temperature (or current / speed), rotors + rolling tread = speed and torque, a thin top-edge bar = pressure, wire arrows = current, flashing red border if any reading is near danger. Hovering shows every reading from every view. A few parts move so nothing overlaps (outside air beside the air box, brake actuator at the cowl, battery temperatures as a strip along the pack). |
 | **Engine** | Close-up of the 2ZR-FXE seen from above, laid out like the real engine (intake at the front, exhaust and catalytic converter at the back, cylinder 4 by the transaxle): air in -> throttle -> manifold -> cylinders -> exhaust, with animated air, exhaust, fuel and coolant flows. Misfires per cylinder, fuel trims, valve timing, and calculated fuel flow, economy, engine power and efficiency. |
 | **Battery** | Close-up of the hybrid pack behind the rear seat: all 14 blocks (voltage, resistance, difference from average), temperatures, cooling air and fan, battery computer limits and stress counters, 12 V battery and DC-DC converter. Live per-block resistance and a capacity estimate. |
 | **Trip** | Running totals: distance, fuel used, average economy, share of distance driven on electricity, battery energy in/out, braking energy recovered, A/C energy, maximums. |
@@ -38,6 +39,7 @@ straight away.
 |---|---|---|
 | ![Temperature](docs/screenshots/temperature.png) | ![Spinning](docs/screenshots/spinning.png) | ![Engine](docs/screenshots/engine.png) |
 | ![Battery](docs/screenshots/battery.png) | ![Trip](docs/screenshots/trip.png) | ![Everything](docs/screenshots/everything.png) |
+| ![Brakes](docs/screenshots/brakes.png) | | |
 
 ## What you need
 
@@ -62,7 +64,7 @@ straight away.
    python app.py
    python app.py --port COM5 --view battery
    ```
-   Views: `temperature`, `electrical`, `spinning`, `pressure`, `everything`, `engine`, `battery`, `trip`. Only one program can use the
+   Views: `temperature`, `electrical`, `spinning`, `pressure`, `brakes`, `everything`, `engine`, `battery`, `trip`. Only one program can use the
    adapter at a time.
 
 ## Android app

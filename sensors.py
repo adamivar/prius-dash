@@ -368,6 +368,95 @@ BATTERY = [
     _S("fan_mode", "Battery fan mode", "219B", lambda d: d[1], "", tech="Cooling Fan Mode 1"),
 ]
 
+def _signed_byte(i, scale):
+    return lambda d: (d[i] - 256 if d[i] >= 128 else d[i]) * scale
+
+
+# Brakes & grip (brake computer 7B0). Formulas: the same spreadsheet; all answered in the 2026-09-26 car test.
+BRAKES = [
+    _S("decel", "Braking / acceleration (g-sensor)", "2105", lambda d: d[0] * 36.36 / 255 - 18.18, "m/s²", "7B0",
+       "Deceleration Sensor", False),
+    _S("decel2", "Braking / acceleration (2nd g-sensor)", "2105", lambda d: d[1] * 36.36 / 255 - 18.18, "m/s²", "7B0",
+       "Deceleration Sensor2"),
+    _S("brake_v", "Brake pressure sensor", "2107", lambda d: d[0] / 51, "V", "7B0", "Wheel Cylinder Pressure Sensor",
+       False),
+    # one step = 1.57 m/s² (about 0.16 g): coarse, but it shows wheelspin and lock-up
+    *[_S(f"wacc_{k}", f"{n} wheel acceleration", "2142", _signed_byte(i, 199.27 / 127), "m/s²", "7B0",
+         f"{k.upper()} Wheel Acceleration", False)
+      for i, (k, n) in enumerate([("fr", "Front right"), ("fl", "Front left"), ("rr", "Rear right"), ("rl", "Rear left")])],
+    _S("regen_coop", "Regen blending with the brakes", "2158", _bit(0, 7), "on/off", "7B0", "Regen Cooperation", False),
+    _S("trc", "Traction control working", "215A", _bit(0, 7), "on/off", "7B0", "TRC(TRAC) Ctrl Status", False),
+    _S("trc_eng", "Traction control cutting power", "215A", _bit(0, 6), "on/off", "7B0", "TRC(TRAC) Engine Ctrl Status",
+       False),
+    _S("trc_brk", "Traction control braking a wheel", "215A", _bit(0, 5), "on/off", "7B0", "TRC(TRAC) Brake Ctrl Status",
+       False),
+    *[_S(f"vsc_{k}", f"Stability control braking the {n} wheel", "215A", _bit(1, 7 - i), "on/off", "7B0",
+         f"{k.upper()} Wheel VSC Ctrl Status", False)
+      for i, (k, n) in enumerate([("fr", "front right"), ("fl", "front left"), ("rr", "rear right"), ("rl", "rear left")])],
+    *[_S(f"abs_{k}", f"ABS working on the {n} wheel", "215F", _bit(0, 7 - i), "on/off", "7B0",
+         f"{k.upper()} Wheel ABS Ctrl Status", False)
+      for i, (k, n) in enumerate([("fr", "front right"), ("fl", "front left"), ("rr", "rear right"), ("rl", "rear left")])],
+    _S("ebd_rr", "EBD balancing the rear right brake", "215F", _bit(0, 1), "on/off", "7B0", "RR Wheel EBD Ctrl Status",
+       False),
+    _S("ebd_rl", "EBD balancing the rear left brake", "215F", _bit(0, 0), "on/off", "7B0", "RL Wheel EBD Ctrl Status",
+       False),
+    _S("ba", "Brake assist working", "215F", _bit(1, 4), "on/off", "7B0", "BA Ctrl Status", False),
+    _S("pba", "Pre-crash brake assist working", "215F", _bit(1, 3), "on/off", "7B0", "PBA Ctrl Status", False),
+    _S("fluid_low", "Brake fluid reservoir warning", "211D", _bit(0, 6), "on/off", "7B0", "Reservoir Warning SW"),
+    # wiring checks the brake computer runs (1 = open circuit / error)
+    *[_S(f"open_{k}", f"{n} - wiring fault", "21BE", _bit(b, bit), "on/off", "7B0", f"{t} Open")
+      for k, n, t, b, bit in [("fr", "Front right wheel-speed sensor", "FR Speed", 0, 7),
+                              ("fl", "Front left wheel-speed sensor", "FL Speed", 0, 6),
+                              ("rr", "Rear right wheel-speed sensor", "RR Speed", 0, 5),
+                              ("rl", "Rear left wheel-speed sensor", "RL Speed", 0, 4),
+                              ("yaw", "Yaw (turning-rate) sensor", "Yaw Rate", 0, 2),
+                              ("decel", "Deceleration (g) sensor", "Deceleration", 0, 1),
+                              ("steer", "Steering angle sensor", "Steering", 0, 0),
+                              ("mc", "Master cylinder pressure sensor", "Master Cylinder", 1, 7),
+                              ("stroke", "Brake pedal stroke sensor", "Stroke", 1, 5),
+                              ("wc", "Wheel cylinder pressure sensor", "FR Wheel Cylinder", 1, 3),
+                              ("accum", "Brake accumulator pressure sensor", "Accumulator", 2, 7),
+                              ("hvcomm", "Link between the brake and hybrid computers", "HV Communication", 2, 6)]],
+]
+BRAKE_OPEN_KEYS = [s.key for s in BRAKES if s.key.startswith("open_")]
+
+# Motors, cruise control, dashboard meter, climate and diagnostic extras (all answered in the 2026-09-26 car test)
+MORE = [
+    _S("mg1_mode", "Generator drive mode", "2167", lambda d: d[4], "",
+       tech="MG1 Control Mode (0 PWM, 1 variable PWM, 2 square wave)"),
+    _S("mg2_mode", "Drive motor drive mode", "2168", lambda d: d[4], "",
+       tech="MG2 Control Mode (0 PWM, 1 variable PWM, 2 square wave)"),
+    _S("mg1_khz", "Generator inverter switching frequency", "217C", lambda d: d[0] / 20, "kHz", tech="MG1 Carrier Frequency"),
+    _S("mg2_khz", "Drive inverter switching frequency", "217C", lambda d: d[1] / 20, "kHz", tech="MG2 Carrier Frequency"),
+    _S("cc_set", "Cruise control set speed", "2121", lambda d: d[0], "km/h", tech="CCS Vehicle Spd"),
+    _S("cc_active", "Cruise control holding speed", "2121", _bit(3, 7), "on/off", tech="Cruise Operation Status"),
+    _S("cc_on", "Cruise control switched on", "2121", _bit(3, 6), "on/off", tech="Cruise Control"),
+    _S("cc_res", "Cruise lever: RES/ACC", "2121", _bit(4, 4), "on/off", tech="RES/ACC Switch"),
+    _S("cc_setsw", "Cruise lever: SET/COAST", "2121", _bit(4, 3), "on/off", tech="SET/COAST Switch"),
+    _S("cc_cancel", "Cruise lever: CANCEL", "2121", _bit(4, 2), "on/off", tech="Cancel Switch"),
+    _S("belt_p", "Passenger seatbelt buckled", "2112", _bit(1, 7), "on/off", "7C0", "P-Seatbelt Buckle SW"),
+    # No headlight signal: in the 2026-09-26 test (at night) turning the headlights on changed neither the dash
+    # brightness (7C0 2168 stayed 253) nor any 7C0 2112 bit, so neither is used.
+    _S("solar", "Sun sensor", "2124", lambda d: d[0], "", "7C4", "Solar Sensor (D side), 0-255"),
+    _S("mix_target", "Heater blend door target", "2141", lambda d: d[0], "pulses", "7C4", "Air Mix Servo Targ Pulse (D)"),
+    _S("mix_pos", "Heater blend door position", "2141", lambda d: d[1], "pulses", "7C4", "Air Mix Servo Actual Pulse (D)"),
+    _S("outlet_pos", "Air outlet door position", "2143", lambda d: d[1], "pulses", "7C4", "Air Outlet Servo Actu Pulse (D)"),
+    _S("inlet_target", "Air inlet door target", "2144", lambda d: d[0], "pulses", "7C4", "Air Inlet Damper Targ Pulse"),
+    _S("inlet_pos", "Air inlet door position", "2144", lambda d: d[1], "pulses", "7C4", "Air Inlet Damper Actual Pulse"),
+    _S("e_comm_hv", "Engine computer hears the hybrid computer", "2124", _bit(0, 5), "on/off", "7E0",
+       "Communication with HV"),
+    _S("e_comm_brake", "Engine computer hears the brake computer", "2124", _bit(0, 3), "on/off", "7E0",
+       "Communication with Brake"),
+    _S("e_comm_ac", "Engine computer hears the climate computer", "2124", _bit(0, 2), "on/off", "7E0",
+       "Comm with Air Conditioner"),
+    _S("dtc_warmups", "Warm-ups since codes were cleared", "2101", lambda d: d[14], "", tech="DTC Clear Warm Up"),
+    _S("dtc_km", "Distance since codes were cleared", "2101", lambda d: w(d, 15), "km", tech="DTC Clear Run Distance"),
+    _S("dtc_min", "Minutes since codes were cleared", "2101", lambda d: w(d, 17), "min", tech="DTC Clear Min"),
+    _S("batt_mode", "Battery computer mode", "219B", lambda d: d[0], "",
+       tech="ECU Control Mode (1 driving, 2 current-sensor offset, 3 external charge, 4 power supply end)"),
+    _S("batt_standby", "Battery fan standby request", "219B", _bit(2, 7), "on/off", tech="Standby Blower Request Status"),
+]
+
 TRIP_KEYS = ("spd_hv", "eng_rpm_hv", "e_maf", "e_lambda", "batt_amps", "vl", "brake_lights", "regen_op",
              "ac_watts", "mg2_nm", "soc")
 
@@ -380,7 +469,7 @@ def _apply_temp_limits():
 _apply_temp_limits()
 
 SENSORS = {s.key: s for s in TEMPS + ELEC + ROT + TORQUE + ONOFF + [SOC] + PRESS + STEER + ELEC_EXTRA
-           + ENGINE + BATTERY}
+           + ENGINE + BATTERY + BRAKES + MORE}
 
 
 def _jobs(sensors):
@@ -592,4 +681,25 @@ def demo_electrical(t, smooth):
              fuel_l=11.5, oil_km=2897.0, dtc_now=0.0, dtc_hist=0.0,
              soc_hv=d["soc"], soc_ig=68.5, soc_max=68.5, soc_min=38.5, cnt_low=0.0, cnt_dcinh=0.0, cnt_high=0.0,
              cnt_hot=0.0, fan_mode=1.0)
+    # brakes & grip: a hard stop with a short ABS pulse on the front wheels late in the braking phase
+    hard = 26 <= p < 27.5
+    decel = (6.5 if hard else 3.0) if braking else (-1.5 if p < 10 else 0.1)
+    d.update(decel=decel + 0.1 * math.sin(t * 3), decel2=decel, brake_v=(2.2 if hard else 1.2) if braking else 0.47,
+             wacc_fr=-decel - (3.1 if hard else 0), wacc_fl=-decel - (3.1 if hard else 0), wacc_rr=-decel,
+             wacc_rl=-decel, regen_coop=1.0 if braking and not hard else 0.0, trc=0.0, trc_eng=0.0, trc_brk=0.0,
+             abs_fr=1.0 if hard and int(t * 4) % 2 else 0.0, abs_fl=1.0 if hard and int(t * 4) % 2 == 0 else 0.0,
+             abs_rr=0.0, abs_rl=0.0, ebd_rr=1.0 if braking else 0.0, ebd_rl=1.0 if braking else 0.0,
+             ba=1.0 if hard else 0.0, pba=0.0, fluid_low=0.0)
+    for k in ("fr", "fl", "rr", "rl"):
+        d[f"vsc_{k}"] = 0.0
+    for k in BRAKE_OPEN_KEYS:
+        d[k] = 0.0
+    cruising = 10 <= p < 22
+    d.update(mg1_mode=2.0 if engine_on and abs(d["mg1_nm"]) > 30 else 0.0, mg2_mode=2.0 if abs(d["mg2_nm"]) > 100 else 1.0,
+             mg1_khz=3.75, mg2_khz=2.5 if d["mg2_rpm"] > 1000 else 5.0, cc_set=round(kmh) if cruising else 0,
+             cc_active=1.0 if cruising else 0.0, cc_on=1.0 if p >= 8 else 0.0, cc_res=0.0, cc_setsw=0.0, cc_cancel=0.0,
+             belt_p=1.0, solar=40 + 30 * math.sin(t / 11),
+             mix_target=6 + 40 * (1 + math.sin(t / 13)), mix_pos=6 + 40 * (1 + math.sin(t / 13)), outlet_pos=47.0,
+             inlet_target=10.0, inlet_pos=10.0, e_comm_hv=1.0, e_comm_brake=1.0, e_comm_ac=1.0,
+             dtc_warmups=1.0, dtc_km=2.0, dtc_min=175.0, batt_mode=1.0, batt_standby=0.0)
     return d

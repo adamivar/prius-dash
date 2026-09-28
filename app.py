@@ -9,6 +9,7 @@ import time
 import tkinter as tk
 
 import config as cfg
+from brakes import BrakesView
 from calc import TRACKER
 from closeups import BatteryView, EngineView, TripView
 from merged import EverythingView
@@ -18,8 +19,8 @@ from views import BG, BODY, DIM, TEXT, ElectricalView, PressureView, SpinView, T
 
 
 def all_views():
-    return [TemperatureView(), ElectricalView(), SpinView(), PressureView(), EverythingView(), EngineView(),
-            BatteryView(), TripView()]
+    return [TemperatureView(), ElectricalView(), SpinView(), PressureView(), BrakesView(), EverythingView(),
+            EngineView(), BatteryView(), TripView()]
 
 
 class App:
@@ -119,7 +120,7 @@ def main():
     ap.add_argument("--port", default=cfg.PORT)
     ap.add_argument("--demo", action="store_true", help="fake data, no car needed")
     ap.add_argument("--view", default="Temperature", help="start in this view (Temperature, Electrical, Spinning, "
-                                                          "Pressure, Everything, Engine, Battery or Trip)")
+                                                          "Pressure, Brakes, Everything, Engine, Battery or Trip)")
     args = ap.parse_args()
 
     try:  # sharp text on scaled Windows displays instead of a blurry stretched window
