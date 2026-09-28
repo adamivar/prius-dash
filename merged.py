@@ -59,8 +59,9 @@ PARTS = [
                show=3, top="map"),
     MergedPart("catalyst", "Catalytic converter", LAYOUT["catalyst"], "canister", [("t", "catalyst")]),
     # tires a touch narrower than elsewhere so the 12 V wire down the left side clears them
-    *[MergedPart(k, k.upper(), (WHEELS_RECT[k][0] + (-0.5 if k[1] == "l" else 0.5), WHEELS_RECT[k][1], 6.5,
-                                WHEELS_RECT[k][3]), "tread", [("s", k), ("b", k)]) for k in ("fl", "fr", "rl", "rr")],
+    *[MergedPart(k, k.upper(), WHEELS_RECT[k] if cfg.PHONE_LAYOUT else
+                 (WHEELS_RECT[k][0] + (-0.5 if k[1] == "l" else 0.5), WHEELS_RECT[k][1], 6.5, WHEELS_RECT[k][3]),
+                 "tread", [("s", k), ("b", k)]) for k in ("fl", "fr", "rl", "rr")],
     MergedPart("steer", "Steering", LAYOUT["steering_wheel"], "circle", [("s", "steer")]),
     *[MergedPart(k, "", LAYOUT[f"lamp{i}"], "lamp", [("e", k)]) for i, k in
       enumerate(("lamp_mil", "lamp_abs", "lamp_brake", "lamp_slip", "lamp_ecb", "buzzer", "lamp_cruise", "lamp_belt"))],

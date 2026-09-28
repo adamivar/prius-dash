@@ -9,6 +9,9 @@ import sys
 import time
 
 from mobile import tkshim
+import config                       # noqa: E402
+
+config.PHONE_LAYOUT = True          # before the views load: the car body fills the screen, tires inside it
 
 sys.modules["tkinter"] = tkshim     # the views build their side panels with tkinter calls - give them Kivy widgets
 
@@ -90,7 +93,8 @@ class PriusApp(App):
         # wider or taller than true proportions to match the phone's shape (text still sized to fit)
         # glance layout: readings as big as each part allows, up to 46 sp - the ISO 15008 recommended letter
         # height (20 arc-minutes) for a phone about 3 ft away; names as 12 sp tags you read up close
-        self.scene = Scene(self.canvas_w, ui=self.ui, font=FONT, margins=(2, 7, 1.5), max_stretch=1.6,
+        # fill: the car body fills the whole area under the top bar, edge to edge (stretched to the phone's shape)
+        self.scene = Scene(self.canvas_w, ui=self.ui, font=FONT, fill=True,
                            tooltip_width=10_000, glance=(sp(12), sp(46)))   # info card: as wide as the screen
         self.canvas_w.bind(size=lambda *_: self._resized())
         self.scene.set_view(self.view)

@@ -65,8 +65,12 @@ WHEEL_H = 32                     # 195/65R15 tire is ~0.63 m tall
 BATT_X0, BATT_X1, BATT_Y0, BATT_ROW2 = 14, 88, 187, 20
 BLK_W = (BATT_X1 - BATT_X0 - 6 * 2) / 7    # 14 blocks, 2 rows of 7, 2-unit gaps
 TB_W = (BATT_X1 - BATT_X0 - 2 * 1.5) / 3   # 3 battery temperature sensors across the same pack
-WHEELS_RECT = {"fl": (-1, FRONT_AXLE - WHEEL_H / 2, 7, WHEEL_H), "fr": (94, FRONT_AXLE - WHEEL_H / 2, 7, WHEEL_H),
-               "rl": (-1, REAR_AXLE - WHEEL_H / 2, 7, WHEEL_H), "rr": (94, REAR_AXLE - WHEEL_H / 2, 7, WHEEL_H)}
+# tires stick out of the body on the PC; on the phone the body fills the screen, so they sit just inside it
+_WX = (4.5, 89.0, 6.5) if cfg.PHONE_LAYOUT else (-1, 94, 7)       # left x, right x, width
+WHEELS_RECT = {"fl": (_WX[0], FRONT_AXLE - WHEEL_H / 2, _WX[2], WHEEL_H),
+               "fr": (_WX[1], FRONT_AXLE - WHEEL_H / 2, _WX[2], WHEEL_H),
+               "rl": (_WX[0], REAR_AXLE - WHEEL_H / 2, _WX[2], WHEEL_H),
+               "rr": (_WX[1], REAR_AXLE - WHEEL_H / 2, _WX[2], WHEEL_H)}
 LAYOUT = {
     # front, behind the bumper
     "dcdc": (L, 3.5, 17, 13),                # DC-DC converter: in the bottom front of the inverter assembly

@@ -160,11 +160,14 @@ class BrakesView:
         pressed = v is not None and v > BRAKE_PRESSED_V
         x0, y0, w, h = ACTUATOR
         mid = y0 + h / 2
-        ly, ry, fy, by = 9, 91, WHEELS_RECT["fl"][1] + WHEELS_RECT["fl"][3] / 2, WHEELS_RECT["rl"][1] + WHEELS_RECT["rl"][3] / 2
-        lines = [[(x0, mid), (ly, mid), (ly, fy), (6, fy)], [(ly, mid), (ly, by), (6, by)],
-                 [(x0 + w, mid), (ry, mid), (ry, fy), (94, fy)], [(ry, mid), (ry, by), (94, by)]]
+        fl, fr, rl = WHEELS_RECT["fl"], WHEELS_RECT["fr"], WHEELS_RECT["rl"]
+        lx, rx = fl[0] + fl[2], fr[0]                         # inner edges of the tires
+        ly, ry = max(9, lx + 1.5), min(91, rx - 1.5)          # the lines run just inside them
+        fy, by = fl[1] + fl[3] / 2, rl[1] + rl[3] / 2
+        lines = [[(x0, mid), (ly, mid), (ly, fy), (lx, fy)], [(ly, mid), (ly, by), (lx, by)],
+                 [(x0 + w, mid), (ry, mid), (ry, fy), (rx, fy)], [(ry, mid), (ry, by), (rx, by)]]
         out = [(pts, None, "", "r", pressed, LINE_STYLE) for pts in lines]
-        out[1] = (lines[1], None, "brake lines", (10.5, 150), pressed, LINE_STYLE)
+        out[1] = (lines[1], None, "brake lines", (ly + 1.5, 150), pressed, LINE_STYLE)
         return out
 
     def decorations(self, values, now):

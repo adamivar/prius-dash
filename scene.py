@@ -13,6 +13,8 @@ from sensors import SENSORS, TRIP_KEYS
 from views import BODY, DIM, IDEAL, TEXT, TIP_FG, WARN, WHEELS_RECT, SpinView
 
 CAR_W, CAR_H = 100, 250   # car drawn in a 100 x 250 unit box, front at the top, driver on the left
+FILL_CAR = (4, 1, 96, 248)        # the car body's outline - what fills the screen in fill mode
+FILL_CLOSEUP = (1, 1, 99, 248)    # the close-up panel
 L_EDGE = 14              # left edge of the parts column (x 4-14 is kept for wires)
 
 mix = shapes.mix
@@ -42,8 +44,10 @@ def poll_plan(view, views, poller):
 
 class Scene:
     def __init__(self, canvas, ui=1.0, font="Segoe UI", margin=16, tooltip_width=cfg.TOOLTIP_WIDTH, max_stretch=1.0,
-                 margins=None, glance=None):
+                 margins=None, glance=None, fill=False):
         self.c = canvas
+        # fill = the car body (or close-up panel) touches the canvas edges: no margins, no "FRONT" / title above it
+        self.fill = fill
         # glance = (tag px, largest value px): "read from arm's length" mode for the phone. Each part's reading is
         # drawn as big as the part allows (up to the largest size) with its name as a small tag in the corner.
         # Needs a canvas with measure(text, px, bold) -> (width, height).
@@ -74,6 +78,10 @@ class Scene:
         """(s, sx, sy, ox, oy): s = text / detail scale (pixels per drawing unit), sx / sy = horizontal / vertical
         scale (differ when stretching to fill the screen), ox / oy = where drawing unit (0, 0) lands."""
         cw, ch = self.c.winfo_width(), self.c.winfo_height()
+        if self.fill:
+            vx0, vy0, vx1, vy1 = FILL_CLOSEUP if getattr(self.view, "scene", "car") == "closeup" else FILL_CAR
+            sx, sy = max(0.1, cw / (vx1 - vx0)), max(0.1, ch / (vy1 - vy0))
+            return min(sx, sy), sx, sy, -vx0 * sx, -vy0 * sy
         side, top, bottom = self.margins
         sx, sy = max(0.1, cw / (CAR_W + 2 * side)), max(0.1, ch / (CAR_H + top + bottom))
         s = min(sx, sy)
@@ -120,19 +128,27 @@ class Scene:
         if closeup:   # close-up views: a plain panel instead of the car
             self.rounded(1, 1, 98, 247, 6, fill=BODY, outline=cfg.BODY_EDGE, width=2)
         else:
-            for k, (wx, wy, ww, wh) in WHEELS_RECT.items():                  # wheels on the real axle lines
-                shapes.draw(c, "tire", *self.rect(wx, wy, ww, wh), cfg.TIRE, cfg.TIRE_EDGE, 1, s=s,
-                            rot=steer_rot.get(k, 0.0))
+            def tires():                                                    # wheels on the real axle lines
+                for k, (wx, wy, ww, wh) in WHEELS_RECT.items():
+                    shapes.draw(c, "tire", *self.rect(wx, wy, ww, wh), cfg.TIRE, cfg.TIRE_EDGE, 1, s=s,
+                                rot=steer_rot.get(k, 0.0))
+            if not self.fill:          # PC: tires stick out from under the body
+                tires()
             self.rounded(4, 1, 92, 247, 18, fill=BODY, outline=cfg.BODY_EDGE, width=2)
+            if self.fill:              # phone: tires sit inside the body outline, drawn on top so they stay visible
+                tires()
             self.rounded(12, 87.5, 76, 6, 3, fill=cfg.GLASS, outline="")     # bottom of the windshield (cowl)
             for sx in (16, 54):                                             # front seats
                 self.rounded(sx, 121, 30, 18, 4, fill="", outline=cfg.SEAT_OUTLINE, dash=(2, 3))
             self.rounded(16, 158, 68, 24, 4, fill="", outline=cfg.SEAT_OUTLINE, dash=(2, 3))   # rear seat
             c.create_text(*self.pt(L_EDGE, 98), text="Dashboard", anchor="sw", fill=DIM, font=(f, fs_small))
-            x0, y0 = self.pt(50, 0)
-            c.create_text(x0, y0 - 2, text="▲ FRONT", fill=DIM, font=(f, fs), anchor="s")
+            if not self.fill:
+                x0, y0 = self.pt(50, 0)
+                c.create_text(x0, y0 - 2, text="▲ FRONT", fill=DIM, font=(f, fs), anchor="s")
 
         for text, nx, ny in self.view.notes:
+            if ny < 0 and self.fill:      # close-up titles sit above the panel; the view name is in the top bar
+                continue
             c.create_text(*self.pt(nx, ny), text=text, anchor="n" if ny >= 0 else "s",
                           fill=TEXT if closeup and ny < 0 else DIM,
                           font=(f, fs if ny < 0 else fs_small, "bold" if ny < 0 else "normal"))
