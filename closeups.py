@@ -82,9 +82,24 @@ def first(*keys):
     return f
 
 
+def to_us(v, unit, dec):
+    """Metric reading -> US units: °F, miles, mph, gallons, mpg, psi. Returns (value, unit, decimals)."""
+    if unit == "°C":
+        return v * 9 / 5 + 32, "°F", dec
+    if unit in ("km", "km/h"):
+        return v * cfg.MI_PER_KM, "mi" if unit == "km" else "mph", dec
+    if unit in ("L", "L/h"):
+        return v / cfg.L_PER_US_GAL, "gal" if unit == "L" else "gal/h", dec + 1
+    if unit == "L/100km":
+        return ("∞ mpg", unit, dec) if v <= 0 else (cfg.MPG_FROM_L100KM / v, "mpg", 0)
+    if unit == "kPa":
+        return v * 0.1450377, "psi", max(dec, 1)
+    return v, unit, dec
+
+
 class CloseupView:
     scene = "closeup"
-    units = [("C", "°C"), ("F", "°F")]
+    units = [("C", "Metric"), ("F", "US")]
     parts = []
     title = ""
     groups = []
@@ -129,8 +144,10 @@ class CloseupView:
             return v
         if unit == "on/off":
             return "ON" if v >= 0.5 else "off"
-        if unit == "°C" and self.unit == "F":
-            v, unit = v * 9 / 5 + 32, "°F"
+        if self.unit == "F":           # US units
+            v, unit, dec = to_us(v, unit, dec)
+            if isinstance(v, str):
+                return v
         return f"{v:,.{dec}f}{'' if unit in ('', '%') or unit.startswith('°') else ' '}{unit}".replace("-", "−")
 
     # ---------- the diagram ----------
@@ -712,7 +729,7 @@ def _tile(key, title, col, row, readings, show=(0,), info="", span=1, tags=()):
 
 class TripView(CloseupView):
     name = "Trip"
-    units = [("C", "°C"), ("F", "°F")]
+    units = [("C", "Metric"), ("F", "US")]
     title = "TRIP  ·  since the app started (or the last reset)"
     default_shape = "rounded"
     about = ("Running totals worked out from the live readings. They're only as good as how often each reading "
@@ -721,13 +738,13 @@ class TripView(CloseupView):
     poll_extra = TRIP_KEYS + ("batt_tb1", "batt_tb2", "batt_tb3", "e_ect", "engine")
     parts = [
         _tile("dist", "Distance", 0, 0, [("Distance", _t(lambda: TRACKER.km), "km", 2),
-                                        ("Distance (miles)", _t(lambda: TRACKER.km * cfg.MI_PER_KM), "mi", 2)], (0, 1)),
+                                        ("Distance (miles)", _t(lambda: TRACKER.km * cfg.MI_PER_KM), "mi", 2)], (0,)),
         _tile("speed", "Average speed", 1, 0, [("Average while moving", _t(TRACKER.avg_speed), "km/h", 0),
                                                ("Time moving", _t(lambda: TRACKER.moving_s / 60), "min", 1)], (0, 1)),
         _tile("fuel", "Fuel used", 0, 1, [("Fuel used", _t(lambda: TRACKER.fuel_l), "L", 2),
                                           ("Fuel used (US gal)", _t(lambda: TRACKER.fuel_l / cfg.L_PER_US_GAL), "gal", 3)], (0,)),
         _tile("econ", "Average economy", 1, 1, [("Average", _t(TRACKER.avg_l_100km), "L/100km", 1),
-                                                ("Average (US)", _t(TRACKER.avg_mpg), "mpg", 0)], (0, 1)),
+                                                ("Average (US)", _t(TRACKER.avg_mpg), "mpg", 0)], (0,)),
         _tile("ev", "Driven on electricity", 0, 2, [("Share of distance with the engine off", _t(TRACKER.ev_share_pct), "%", 0),
                                                     ("Distance with the engine off", _t(lambda: TRACKER.ev_km), "km", 2)],
               (0,), "Distance covered while the engine was stopped (engine rpm under 100) - a Prius specialty."),

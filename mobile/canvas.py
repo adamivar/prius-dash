@@ -88,6 +88,37 @@ class KivyCanvas(Widget):
         self._trigger = Clock.create_trigger(self._render, -1)
         self.bind(pos=self._all_dirty, size=self._all_dirty)
 
+    # ---------- text size (for the phone's big-reading layout) ----------
+    _glyphs = {}
+
+    @classmethod
+    def measure(cls, text, px, bold=False):
+        """(width, height) in pixels of text at font size px, one glyph at a time (fast enough to call for every
+        part on every redraw; a few % off from real kerning, so callers leave a little margin)."""
+        lines = text.split("\n")
+        widest = 0.0
+        for line in lines:
+            wsum = 0.0
+            for ch in line:
+                key = (ch, bold)
+                if key not in cls._glyphs:
+                    lbl = CoreLabel(text=ch if ch != " " else "a a", font_size=100, bold=bold, font_name=FONT)
+                    lbl.refresh()
+                    wid = lbl.texture.size[0]
+                    if ch == " ":
+                        a = CoreLabel(text="aa", font_size=100, bold=bold, font_name=FONT)
+                        a.refresh()
+                        wid -= a.texture.size[0]
+                    cls._glyphs[key] = (wid, lbl.texture.size[1])
+                wsum += cls._glyphs[key][0]
+            widest = max(widest, wsum)
+        if ("Ag", bold) not in cls._glyphs:     # one line's height at 100 px
+            lbl = CoreLabel(text="Ag", font_size=100, bold=bold, font_name=FONT)
+            lbl.refresh()
+            cls._glyphs[("Ag", bold)] = lbl.texture.size
+        line_h = cls._glyphs[("Ag", bold)][1]
+        return widest * px / 100 * 1.04, len(lines) * line_h * px / 100
+
     # ---------- tkinter-style API ----------
     def winfo_width(self):
         return int(self.width)

@@ -54,6 +54,7 @@ class PriusApp(App):
                       EngineView(), BatteryView(), TripView()]
         self.settings = self._load()
         self.view = next((v for v in self.views if v.name == self.settings.get("view")), self.views[0])
+        self._apply_units()
         self.poller = None
         self.ticks = 0
         self.last_frame = time.monotonic()
@@ -87,8 +88,10 @@ class PriusApp(App):
 
         # fill the whole screen: tight margins (wheels + the "FRONT" / close-up title above), stretched up to 60%
         # wider or taller than true proportions to match the phone's shape (text still sized to fit)
+        # glance layout: readings as big as each part allows, up to 46 sp - the ISO 15008 recommended letter
+        # height (20 arc-minutes) for a phone about 3 ft away; names as 12 sp tags you read up close
         self.scene = Scene(self.canvas_w, ui=self.ui, font=FONT, margins=(2, 7, 1.5), max_stretch=1.6,
-                           tooltip_width=10_000)   # info card: as wide as the screen allows
+                           tooltip_width=10_000, glance=(sp(12), sp(46)))   # info card: as wide as the screen
         self.canvas_w.bind(size=lambda *_: self._resized())
         self.scene.set_view(self.view)
         self._build_panel()
@@ -115,6 +118,31 @@ class PriusApp(App):
                 json.dump(self.settings, f)
         except OSError:
             pass
+
+    # ---------- units (US by default on the phone; your choices are remembered) ----------
+    def _unit_holders(self):
+        """Every view object that has its own unit switch, by a stable name (the Everything view keeps its own
+        copies of the car views)."""
+        out = {v.name: v for v in self.views if v.units}
+        merged = next((v for v in self.views if isinstance(v, EverythingView)), None)
+        if merged:
+            out.update({f"Everything/{code}": v for code, v in merged.src.items() if v.units})
+        return out
+
+    def _apply_units(self):
+        saved = self.settings.get("units")
+        for name, v in self._unit_holders().items():
+            codes = [u for u, _ in v.units]
+            if saved and saved.get(name) in codes:
+                v.unit = saved[name]
+            elif not saved:
+                v.unit = next((u for u in ("F", "psi") if u in codes), v.unit)
+
+    def _remember_units(self):
+        units = {name: v.unit for name, v in self._unit_holders().items()}
+        if units != self.settings.get("units"):
+            self.settings["units"] = units
+            self._save()
 
     # ---------- connecting ----------
     def startup(self):
@@ -230,6 +258,7 @@ class PriusApp(App):
             return
         values, status, cycle_ms = self.poller.snapshot()
         TRACKER.update(values, time.time())
+        self._remember_units()
         self.view.update_panel(values, time.time())
         self.status.text = status.replace("\n", "  ") + (f"   ·   full refresh {cycle_ms} ms" if cycle_ms else "")
         self.redraw()

@@ -42,8 +42,12 @@ def poll_plan(view, views, poller):
 
 class Scene:
     def __init__(self, canvas, ui=1.0, font="Segoe UI", margin=16, tooltip_width=cfg.TOOLTIP_WIDTH, max_stretch=1.0,
-                 margins=None):
+                 margins=None, glance=None):
         self.c = canvas
+        # glance = (tag px, largest value px): "read from arm's length" mode for the phone. Each part's reading is
+        # drawn as big as the part allows (up to the largest size) with its name as a small tag in the corner.
+        # Needs a canvas with measure(text, px, bold) -> (width, height).
+        self.glance = glance
         self.ui = ui                 # line-width / spacing scale (1.0 = a 96 dpi Windows screen)
         self.font = font
         # drawing units kept free around the car: (left/right each, top, bottom); default = margin / 2 all round
@@ -182,11 +186,14 @@ class Scene:
             shapes.draw(c, kind, x0, y0, x1, y1, cell.fill, outline, width,
                         (5, 3) if cell.dashed and cell.state is None else None, s, rot=rot)
             name = self.view.label(key)
-            text = f"{name.replace(chr(10), ' ')}   {cell.text}" if h < cfg.ONE_LINE_BOX else f"{name}\n{cell.text}"
             tx0, ty0, tx1, ty1 = self.rect(*shapes.text_box(kind, x, y, w_, h))
-            c.create_text((tx0 + tx1) / 2, (ty0 + ty1) / 2, text=text, fill=text_on(cell.fill), justify="center",
-                          width=max(20, tx1 - tx0 - 6), font=(f, fs if w_ >= cfg.NARROW_BOX else fs_tiny, "bold"),
-                          tags="label")
+            if self.glance:
+                self.glance_text(name, cell, (tx0, ty0, tx1, ty1))
+            else:
+                text = f"{name.replace(chr(10), ' ')}   {cell.text}" if h < cfg.ONE_LINE_BOX else f"{name}\n{cell.text}"
+                c.create_text((tx0 + tx1) / 2, (ty0 + ty1) / 2, text=text, fill=text_on(cell.fill), justify="center",
+                              width=max(20, tx1 - tx0 - 6), font=(f, fs if w_ >= cfg.NARROW_BOX else fs_tiny, "bold"),
+                              tags="label")
             if key in spinning and kind in ("tread", "geartread"):   # seen from above, tread / teeth roll past
                 rpm, torque, _ = spinning[key]
                 t = torque or 0.0
@@ -242,6 +249,88 @@ class Scene:
         self.draw_rotors()
         if self.hover:
             self.draw_tooltip(values, now)
+
+    def glance_text(self, name, cell, box):
+        """Phone layout: the reading as big as the part allows (up to the glance size), the name as a small tag.
+        Parts with no reading (dashboard lamps) show their name big instead. Tap a part for everything in full."""
+        c, f = self.c, self.font
+        tag_px, max_px = self.glance
+        x0, y0, x1, y1 = box
+        pad = max(2.0, 2 * self.ui)
+        x0, y0, x1, y1 = x0 + pad, y0 + pad, x1 - pad, y1 - pad
+        w, h = x1 - x0, y1 - y0
+        if w < 8 or h < 6:
+            return
+        colour = text_on(cell.fill)
+        name = name.replace("\n", " ")
+        value = cell.text.strip()
+        if not value:                 # dashboard lamps: the name is the reading
+            if not name:
+                return
+            value, name = name, ""
+
+        def fit(text, aw, ah, cap):
+            """Largest bold px (<= cap) at which text fits aw x ah, from its size at 100 px."""
+            tw, th = c.measure(text, 100, True)
+            return max(1.0, min(cap, 100 * aw / max(tw, 1), 100 * ah / max(th, 1)))
+
+        def wrap(text, aw, px, max_lines):
+            """Greedy word wrap into at most max_lines lines no wider than aw, or None if it won't fit."""
+            lines, cur = [], ""
+            for word in text.split(" "):
+                trial = f"{cur} {word}".strip()
+                if cur and c.measure(trial, px, False)[0] > aw:
+                    lines.append(cur)
+                    cur = word
+                else:
+                    cur = trial
+            lines.append(cur)
+            if len(lines) > max_lines or any(c.measure(ln, px, False)[0] > aw for ln in lines):
+                return None
+            return lines
+
+        def tag(text, aw, ah):
+            """The name as a small tag: full size on 1-2 lines if it fits, else shrunk (to 60%), else shortened
+            with an ellipsis as a last resort (tap the part for its full name). Returns (lines, px)."""
+            size = min(tag_px, ah)
+            for px in (size, size * 0.85, size * 0.72, size * 0.6):
+                line_h = c.measure("A", px, False)[1]
+                most = max(1, min(2, int(ah // line_h)))
+                lines = wrap(text, aw, px, most)
+                if lines:
+                    return lines, px
+            px = size * 0.6
+            while text and c.measure(text, px, False)[0] > aw:
+                text = text[:-2].rstrip() + "…" if len(text) > 2 else ""
+            return ([text] if text else []), px
+
+        def draw_tag(lines, px, x, y, anchor):
+            if lines:
+                c.create_text(x, y, text="\n".join(lines), anchor=anchor, justify="center" if anchor == "n" else "left",
+                              fill=colour, font=(f, -px), tags="label")
+
+        # layout 1: name on top (up to 2 lines, at most ~35% of the height), reading underneath
+        v_lines, v_px = tag(name, w, max(tag_px * 0.6, min(2.2 * tag_px, h * 0.35))) if name else ([], 0)
+        v_top = y0 + (c.measure("\n".join(v_lines), v_px, False)[1] if v_lines else 0)
+        v_value = fit(value, w, y1 - v_top, max_px)
+        # layout 2 (short, wide parts): name on the left, reading on the right - only if the reading gets
+        # clearly bigger and the name isn't shortened
+        best = "top"
+        if name and w > 2.2 * h:
+            h_lines, h_px = tag(name, w * 0.45, h)
+            if h_lines and not h_lines[-1].endswith("…"):
+                name_w = max(c.measure(ln, h_px, False)[0] for ln in h_lines) + 2 * pad
+                h_value = fit(value, w - name_w, h, max_px)
+                if h_value > v_value * 1.15 or (v_lines and v_lines[-1].endswith("…")):
+                    best = "left"
+        if best == "left":
+            draw_tag(h_lines, h_px, x0, (y0 + y1) / 2, "w")
+            c.create_text(x1, (y0 + y1) / 2, text=value, anchor="e", justify="right", fill=colour,
+                          font=(f, -h_value, "bold"), tags="label")
+        else:
+            draw_tag(v_lines, v_px, (x0 + x1) / 2, y0, "n")
+            c.create_text((x0 + x1) / 2, (v_top + y1) / 2, text=value, justify="center", fill=colour,
+                          font=(f, -v_value, "bold"), tags="label")
 
     def decoration(self, d, fs_small):
         """Extra drawing a view asks for, in drawing units: circle / line / text (e.g. the g-ball)."""

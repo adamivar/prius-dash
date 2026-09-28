@@ -77,7 +77,11 @@ The same views run on an Android phone (Android 7 or newer).
 2. Pair the ELM327 adapter in Android's Bluetooth settings (PIN usually `1234` or `0000`).
 3. Open **Prius Live**, allow "Nearby devices" when asked, and pick the adapter (or **Demo mode**). The app remembers
    it; tap **Adapter** to change it.
-4. Pick a view at the top. **Info** shows that view's side panel (units, legend, readings); tap a part for all its
+4. The phone layout is made to be read from about 3 ft away (a dash mount): every part and every reading stays on
+   screen, and each reading is drawn as big as its part allows, up to 46 sp (the ISO 15008 recommended letter height at
+   that distance), with the part's name as a small tag. Units default to US (°F, mi, gal, mpg, psi); switch per view in
+   **Info**, and the app remembers your choice.
+5. Pick a view at the top. **Info** shows that view's side panel (units, legend, readings); tap a part for all its
    readings, tap it again or press Back to close. The screen stays on while the app is open.
 
 Only one app can use the adapter at a time. The phone app is `main.py` (Kivy); it shares everything else with the
