@@ -51,7 +51,7 @@ PARTS = [
     MergedPart("mg1", "Generator\n(MG1)", LAYOUT["mg1"], "drum", [("t", "mg1"), ("e", "mg1"), ("s", "mg1")]),
     MergedPart("ring", "Ring gear", (L, 74, R - L, 7.5), "geartread", [("s", "ring")]),
     MergedPart("brake_act", "Brake actuator", (L, 82.5, R - L, 10.5), "valveblock",
-               [("e", "brake_act"), ("b", "brake_act")], top="brake"),
+               [("b", "brake_act"), ("e", "brake_act")]),
     MergedPart("outside", "Outside air", (E0, 17.5, 18, 13), "rounded", [("t", "ambient"), ("p", "baro")],
                top="baro"),
     MergedPart("intake", "Air box", (E0 + 19, 17.5, 15, 13), "airbox", [("t", "intake_air")]),
@@ -120,8 +120,12 @@ class EverythingView:
         state = "warn" if "warn" in states else ("ideal" if "ideal" in states else None)
         texts = [c.text.replace("\n", " ") for c in have if c.text]
         ring = next((c.ring for c in cells if c.ring), None)
+        # fill level from the electrical / brake side (battery charge, 12 V, brake pressure); the pressure view's
+        # levels stay as the thin top-edge bars here, since the fill colour already shows temperature
+        lvl = next((c.level for (code, _), c in zip(p.sources, cells) if c.level is not None and code in ("e", "b")),
+                   None)
         return Cell(first.fill, p.sep.join(texts[:p.show]) if texts else ("" if not first.text else "--"), state,
-                    first.dashed, ring)
+                    first.dashed, ring, lvl)
 
     def spinners(self, values, now):
         return [(self.from_spin[k], *rest) for k, *rest in self.src["s"].spinners(values, now) if k in self.from_spin]

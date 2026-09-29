@@ -104,17 +104,61 @@ def rotate(pts, cx, cy, deg):
     return [(cx + (x - cx) * ca - (y - cy) * sa, cy + (x - cx) * sa + (y - cy) * ca) for x, y in pts]
 
 
-def draw(c, kind, x0, y0, x1, y1, fill, outline, width, dash=None, s=4.0, tags=(), rot=0.0):
+EMPTY = "#16191e"    # the empty part of a part drawn as a tank (see draw(level=...))
+
+
+def liquid_colour(fill):
+    """The fill of a part drawn as a tank, kept mid-tone: light enough to stand out from the empty part, dark
+    enough for light text on top (the text runs across both the full and the empty part)."""
+    r, g, b = (int(fill[i:i + 2], 16) for i in (1, 3, 5))
+    lum = 0.299 * r + 0.587 * g + 0.114 * b
+    if lum > 100:
+        return mix(fill, "#000000", 1 - 100 / lum)
+    if lum < 55:
+        return mix(fill, "#ffffff", (55 - lum) / (255 - lum))
+    return fill
+
+
+def clip_below(pts, y_cut):
+    """The part of a polygon at or below the horizontal line y = y_cut (screen y grows downwards)."""
+    out = []
+    for i, (ax, ay) in enumerate(pts):
+        bx, by = pts[(i + 1) % len(pts)]
+        a_in, b_in = ay >= y_cut, by >= y_cut
+        if a_in:
+            out.append((ax, ay))
+        if a_in != b_in:
+            t = (y_cut - ay) / (by - ay)
+            out.append((ax + (bx - ax) * t, y_cut))
+    return out
+
+
+def draw(c, kind, x0, y0, x1, y1, fill, outline, width, dash=None, s=4.0, tags=(), rot=0.0, level=None):
     """Draw part `kind` filling the pixel rectangle; returns nothing. s = pixels per drawing unit.
-    rot = turn the shape about its centre (degrees, clockwise); only the tire shapes use it (steered wheels)."""
+    rot = turn the shape about its centre (degrees, clockwise); only the tire shapes use it (steered wheels).
+    level = 0..1: draw it like a tank filled to that height (0 = empty, no line; 1 = full), for things with a
+    capacity (battery charge, fuel, pressures...)."""
     w, h = x1 - x0, y1 - y0
     det = detail_colour(fill)
     lw = max(1, round(s * 0.22))
     cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
 
     def body(pts):
-        c.create_polygon([v for p in rotate(pts, cx, cy, rot) for v in p], fill=fill, outline=outline, width=width,
-                         dash=dash, tags=tags)
+        flat_pts = rotate(pts, cx, cy, rot)
+        flat = [v for p in flat_pts for v in p]
+        if level is None:
+            c.create_polygon(flat, fill=fill, outline=outline, width=width, dash=dash, tags=tags)
+            return
+        c.create_polygon(flat, fill=EMPTY, outline="", tags=tags)
+        y_top = y1 - h * max(0.0, min(1.0, level))
+        liquid = clip_below(flat_pts, y_top) if level > 0 else []
+        if len(liquid) >= 3:
+            c.create_polygon([v for p in liquid for v in p], fill=liquid_colour(fill), outline="", tags=tags)
+            top = [p for p in liquid if abs(p[1] - y_top) < 0.01]
+            if len(top) >= 2 and level < 0.999:     # the fill line
+                c.create_line(min(p[0] for p in top), y_top, max(p[0] for p in top), y_top,
+                              fill=mix(liquid_colour(fill), "#ffffff", 0.6), width=max(2, lw * 2), tags=tags)
+        c.create_polygon(flat, fill="", outline=outline, width=width, dash=dash, tags=tags)
 
     def line(*pts, colour=det, wd=lw):
         c.create_line(*[v for p in rotate(list(pts), cx, cy, rot) for v in p], fill=colour, width=wd, tags=tags)

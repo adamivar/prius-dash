@@ -123,7 +123,7 @@ class BrakesView:
             frac = max(0.0, (v - lo) / (hi - lo))
             fault = any(_on(values, now, f"open_{k}") for k in ("mc", "stroke", "wc", "accum", "hvcomm"))
             text = f"{frac * 100:.0f}% pressure" + ("  ·  regen" if _on(values, now, "regen_coop") else "")
-            return Cell(ramp(PRESS_RAMP, frac), text, "warn" if fault else None)
+            return Cell(ramp(PRESS_RAMP, frac), text, "warn" if fault else None, level=min(1.0, frac))
         if key == "fluid":
             low = _on(values, now, "fluid_low")
             if low is None:

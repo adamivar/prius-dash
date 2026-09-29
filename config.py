@@ -322,6 +322,7 @@ MPG_ENGINE_OFF = 999.0           # shown as mpg when moving with the engine off 
 # Phone layout: set by main.py before the views load. The car body fills the screen edge to edge, so the tires
 # are drawn inside the body outline (as seen from above, they sit under the fenders) instead of sticking out.
 PHONE_LAYOUT = False
+LEVEL_12V = "#3b8f5c"            # 12 V battery fill colour (drawn filled to its voltage)
 
 # ---------- Brakes & grip view, climate doors, dashboard ----------
 BRAKE_V_RANGE = (0.47, 2.5)      # brake pressure sensor volts: released .. hard stop [MEASURED 2026-09-26: 0.47..2.41]

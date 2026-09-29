@@ -32,6 +32,14 @@ def text_on(hex_colour):
     return cfg.DARK_TEXT if (0.299 * r + 0.587 * g + 0.114 * b) > cfg.TEXT_LIGHTNESS_SWITCH else TEXT
 
 
+def cell_text(cell):
+    """Text colour for a part: suits its fill; always light on a part drawn as a tank (see Cell.level), whose
+    liquid is kept mid-tone for that (shapes.liquid_colour)."""
+    if cell.level is not None:
+        return TEXT
+    return text_on(cell.fill)
+
+
 def poll_plan(view, views, poller):
     """Current view polled fast; the trip totals every few loops; every other view in the background."""
     active = view.sensors()
@@ -200,14 +208,14 @@ class Scene:
             kind = getattr(self.view, "shapes", {}).get(key, "box")   # outline that looks like the real part
             rot = steer_rot.get(key, 0.0) if kind == "tread" else 0.0   # steered front tires (Spinning view)
             shapes.draw(c, kind, x0, y0, x1, y1, cell.fill, outline, width,
-                        (5, 3) if cell.dashed and cell.state is None else None, s, rot=rot)
+                        (5, 3) if cell.dashed and cell.state is None else None, s, rot=rot, level=cell.level)
             name = self.view.label(key)
             tx0, ty0, tx1, ty1 = self.rect(*shapes.text_box(kind, x, y, w_, h))
             if self.glance:
                 self.glance_text(name, cell, (tx0, ty0, tx1, ty1))
             else:
                 text = f"{name.replace(chr(10), ' ')}   {cell.text}" if h < cfg.ONE_LINE_BOX else f"{name}\n{cell.text}"
-                c.create_text((tx0 + tx1) / 2, (ty0 + ty1) / 2, text=text, fill=text_on(cell.fill), justify="center",
+                c.create_text((tx0 + tx1) / 2, (ty0 + ty1) / 2, text=text, fill=cell_text(cell), justify="center",
                               width=max(20, tx1 - tx0 - 6), font=(f, fs if w_ >= cfg.NARROW_BOX else fs_tiny, "bold"),
                               tags="label")
             if key in spinning and kind in ("tread", "geartread"):   # seen from above, tread / teeth roll past
@@ -277,7 +285,7 @@ class Scene:
         w, h = x1 - x0, y1 - y0
         if w < 8 or h < 6:
             return
-        colour = text_on(cell.fill)
+        colour = cell_text(cell)
         name = name.replace("\n", " ")
         value = cell.text.strip()
         if not value:                 # dashboard lamps: the name is the reading

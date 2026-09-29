@@ -12,6 +12,7 @@ import config as cfg
 from calc import TRACKER
 
 from sensors import BATTERY, ELEC, ELEC_EXTRA, ENGINE, PRESS, ROT, SENSORS, SOC, TEMPS, TRIP_KEYS
+from views import level as fill_level  # noqa: E402  (how full to draw a part; `level` here is a colour helper)
 from views import (BATT_X0, BG, BLK_IDEAL_DEV, BLK_WARN_DEV, DIM, HEAT, IDEAL, NO_DATA, TEXT, TIP_FG, WARN, WARN_AT,
                    AUX_HIGH, AUX_IDEAL, AUX_LOW, Cell, fresh, legend, panel_label, ramp, reading_rows, unit_buttons)
 
@@ -108,6 +109,7 @@ class CloseupView:
     poll_extra = ()                   # sensors used inside calculated readings (so they get polled too)
     flows = []
     part_shapes = {}                  # part key -> outline shape (see shapes.py)
+    levels = {}                       # part key -> function(values, now) -> 0..1 fill (things with a capacity)
     default_shape = "box"
 
     def __init__(self):
@@ -162,7 +164,8 @@ class CloseupView:
         texts = [f"{tag} {t}" if tag else t for tag, t in zip(list(p.tags) + [""] * len(texts), texts)]
         c = p.colour(values, now) if p.colour else None
         fill = ramp(c[0], c[1]) if c else cfg.CLOSEUP_PART
-        return Cell(fill, "\n".join(texts), p.state(values, now) if p.state else None)
+        lvl = self.levels[key](values, now) if key in self.levels else None
+        return Cell(fill, "\n".join(texts), p.state(values, now) if p.state else None, level=lvl)
 
     def wires(self, values, now):
         out = []
@@ -321,6 +324,12 @@ class EngineView(CloseupView):
                    "vvt": "gear", "ignition": "strip4", "egr": "drum", **{f"cyl{i}": "circle" for i in range(1, 5)},
                    "crank": "pulley", "coolant": "radiator", "catalyst": "canister", "afs": "pill", "eff": "rounded",
                    "ecu": "ecu", "service": "sump"}
+    levels = {
+        "fuel": lambda v, n: fill_level(fresh(v, "fuel_l", n), cfg.FUEL_LOW_L, cfg.FUEL_TANK_L),
+        "manifold": lambda v, n: fill_level(first("map_ecm", "map_hv")(v, n), *cfg.PRESS_LIMITS["map"][1:3]),
+        # oil life: full just after an oil change, empty when it's due
+        "service": lambda v, n: None if fresh(v, "oil_km", n) is None else 1 - fill_level(fresh(v, "oil_km", n), 0, cfg.OIL_DUE_KM),
+    }
     flow_over = ("injectors", "ignition")   # seen from above, the air to each cylinder passes under these
     groups = [("Engine (top view)", 2, 33, 96, 78),
               ("Under the rear seat", 8, 174, 40, 24)]
@@ -609,6 +618,9 @@ class BatteryView(CloseupView):
         Flow([(62, 9), (98.6, 9), (98.6, 217), (96, 217)], LV, _dcdc_on, "12 V", (64, 7)),
         Flow([(98.6, 52), (96, 52)], LV, _fan_on),
     ]
+    levels = {"pack": lambda v, n: fill_level(_soc(v, n), *cfg.SOC_IDEAL),
+              **{f"b{i}": (lambda v, n: fill_level(_soc(v, n), *cfg.SOC_IDEAL)) for i in range(1, 15)},
+              "aux": lambda v, n: fill_level(fresh(v, "aux_volts", n), *AUX_IDEAL)}
     part_shapes = {"pack": "rounded", "limits": "ecu", **{f"b{i}": "module" for i in range(1, 15)},
                    **{f"t{i}": "pill" for i in (1, 2, 3)}, "intake": "vent", "health": "rounded", "fan": "fan",
                    "counters": "ecu", "aux": "battery", "dcdc": "finned"}

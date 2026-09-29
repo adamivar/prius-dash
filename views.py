@@ -38,6 +38,15 @@ class Cell:
     state: str = None      # None, "ideal" (green border) or "warn" (flashing red border)
     dashed: bool = False   # dashed outline = this value isn't measured
     ring: str = None       # colour of a thick outline ring (e.g. ABS working on a wheel); flashing red wins
+    level: float = None    # 0..1: drawn filled like a tank (things with a capacity); see level()
+
+
+def level(v, lowest, highest):
+    """How full to draw something with a capacity: 0 (empty, no fill line) at the lowest recommended value,
+    1 (full to the top) at the highest; clamped outside that range. None when there's no reading."""
+    if v is None:
+        return None
+    return max(0.0, min(1.0, (v - lowest) / (highest - lowest)))
 
 
 # ---------- one map of the car, shared by every view ----------
@@ -617,7 +626,8 @@ class ElectricalView:
         if None not in blocks:
             dev = abs(v - sum(blocks) / 14)
             state = "warn" if dev >= BLK_WARN_DEV else ("ideal" if dev <= BLK_IDEAL_DEV else None)
-        return Cell(fill, text, state)
+        # filled to the pack's charge: empty at the bottom of the range the car keeps it in, full at the top
+        return Cell(fill, text, state, level=level(fresh(values, "soc", now), *cfg.SOC_IDEAL))
 
     def block_tooltip(self, key, values, now):
         n = int(key[3:])
@@ -731,7 +741,7 @@ class ElectricalView:
             if v is None:
                 return Cell(NO_DATA, "--", dashed=True)
             state = "warn" if v < AUX_LOW or v > AUX_HIGH else ("ideal" if AUX_IDEAL[0] <= v <= AUX_IDEAL[1] else None)
-            return Cell(NO_DATA, f"{v:.1f} V", state, dashed=True)
+            return Cell(cfg.LEVEL_12V, f"{v:.1f} V", state, dashed=True, level=level(v, *AUX_IDEAL))
         if key == "dcdc":
             return Cell(NO_DATA, text, dashed=True)
         a = d["A"]
@@ -1411,7 +1421,7 @@ class PressureView:
         if v is None:
             return Cell(NO_DATA, "--")
         return Cell(ramp(PRESS_RAMP, abs(v) / PRESS_LIMITS[key][0]), self.fmt(v).replace("-", "−"),
-                    self.state(key, v))
+                    self.state(key, v), level=level(v, PRESS_LIMITS[key][1], PRESS_LIMITS[key][2]))
 
     def wires(self, values, now):
         return []
